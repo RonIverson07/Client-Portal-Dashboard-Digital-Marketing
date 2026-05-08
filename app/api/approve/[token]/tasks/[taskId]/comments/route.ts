@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/lib/supabase';
+import { sendNotificationEmail } from '@/lib/email';
 
 interface RouteParams {
   params: { token: string; taskId: string };
@@ -40,7 +41,7 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
 export async function POST(req: NextRequest, { params }: RouteParams) {
   const { data: client, error: clientError } = await supabase
     .from('clients')
-    .select('id')
+    .select('id, company_name')
     .eq('private_token', params.token)
     .single();
 
@@ -48,7 +49,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
   const { data: task, error: taskError } = await supabase
     .from('tasks')
-    .select('id')
+    .select('id, title')
     .eq('id', params.taskId)
     .eq('client_id', client.id)
     .single();
@@ -91,6 +92,29 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       new_value: sanitizedText.substring(0, 200) 
     }
   ]);
+
+  // 4. Send Email Notification
+  try {
+    const { data: settings } = await supabase.from('settings').select('notification_email').eq('id', 1).single();
+    if (settings?.notification_email) {
+      const subject = `[${client.company_name}] New Comment on: ${task.title}`;
+      const html = `
+        <div style="font-family: sans-serif; line-height: 1.5; color: #333;">
+          <h2 style="color: #2563eb;">New Client Comment</h2>
+          <p><strong>Client:</strong> ${client.company_name}</p>
+          <p><strong>Task:</strong> ${task.title}</p>
+          <div style="margin: 20px 0; padding: 15px; background: #f8fafc; border-left: 4px solid #2563eb; font-style: italic;">
+            "${sanitizedText}"
+          </div>
+          <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
+          <p style="font-size: 14px; color: #666;">Reply to this comment in your <a href="${process.env.NEXT_PUBLIC_APP_URL}/dashboard">Admin Dashboard</a>.</p>
+        </div>
+      `;
+      await sendNotificationEmail(settings.notification_email, subject, html);
+    }
+  } catch (err) {
+    console.error('Failed to send comment notification email:', err);
+  }
 
   return NextResponse.json({ comment }, { status: 201 });
 }

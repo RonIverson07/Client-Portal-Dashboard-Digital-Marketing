@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/lib/supabase';
+import { sendNotificationEmail } from '@/lib/email';
 
 interface RouteParams {
   params: { token: string; taskId: string };
@@ -8,7 +9,7 @@ interface RouteParams {
 export async function PATCH(req: NextRequest, { params }: RouteParams) {
   const { data: client, error: clientError } = await supabase
     .from('clients')
-    .select('id')
+    .select('id, company_name')
     .eq('private_token', params.token)
     .single();
 
@@ -54,6 +55,28 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
       new_value: status 
     }
   ]);
+
+  // 4. Send Email Notification
+  try {
+    const { data: settings } = await supabase.from('settings').select('notification_email').eq('id', 1).single();
+    if (settings?.notification_email) {
+      const statusLabel = status === 'approved' ? 'Approved' : status === 'for_revision' ? 'Revision Requested' : status;
+      const subject = `[${client.company_name}] Task ${statusLabel}: ${task.title}`;
+      const html = `
+        <div style="font-family: sans-serif; line-height: 1.5; color: #333;">
+          <h2 style="color: #2563eb;">Task Status Updated</h2>
+          <p><strong>Client:</strong> ${client.company_name}</p>
+          <p><strong>Task:</strong> ${task.title}</p>
+          <p><strong>New Status:</strong> <span style="padding: 4px 8px; border-radius: 4px; background: ${status === 'approved' ? '#dcfce7' : '#fef9c3'}; color: ${status === 'approved' ? '#166534' : '#854d0e'};">${statusLabel}</span></p>
+          <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
+          <p style="font-size: 14px; color: #666;">View this task in your <a href="${process.env.NEXT_PUBLIC_APP_URL}/dashboard">Admin Dashboard</a>.</p>
+        </div>
+      `;
+      await sendNotificationEmail(settings.notification_email, subject, html);
+    }
+  } catch (err) {
+    console.error('Failed to send status update email:', err);
+  }
 
   return NextResponse.json({ task: updatedTask });
 }
