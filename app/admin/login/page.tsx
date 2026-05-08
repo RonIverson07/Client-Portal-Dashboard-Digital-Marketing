@@ -9,7 +9,36 @@ export default function AdminLoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
+  const [forgotLoading, setForgotLoading] = useState(false);
+
+  const handleForgotPassword = async () => {
+    if (!email) {
+      setError('Please enter your email address first.');
+      return;
+    }
+    setError('');
+    setSuccess('');
+    setForgotLoading(true);
+
+    try {
+      const res = await fetch('/api/admin/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      if (res.ok) {
+        setSuccess('Password reset request sent. Please check your inbox.');
+      } else {
+        setError('Failed to send reset request. Please try again.');
+      }
+    } catch {
+      setError('Connection error. Please try again.');
+    } finally {
+      setForgotLoading(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -54,6 +83,7 @@ export default function AdminLoginPage() {
 
         <form onSubmit={handleSubmit} className={styles.form}>
           {error && <div className="alert alert-error">{error}</div>}
+          {success && <div className="alert alert-success">{success}</div>}
 
           <div className="form-group">
             <label htmlFor="email">Email address</label>
@@ -69,7 +99,17 @@ export default function AdminLoginPage() {
           </div>
 
           <div className="form-group">
-            <label htmlFor="password">Password</label>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <label htmlFor="password">Password</label>
+              <button 
+                type="button" 
+                className={styles.forgotBtn} 
+                onClick={handleForgotPassword}
+                disabled={forgotLoading}
+              >
+                {forgotLoading ? 'Sending...' : 'Forgot password?'}
+              </button>
+            </div>
             <input
               id="password"
               type="password"

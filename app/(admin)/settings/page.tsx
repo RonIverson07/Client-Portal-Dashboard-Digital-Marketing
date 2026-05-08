@@ -16,6 +16,14 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState({ text: '', type: '' });
+  
+  const [passwords, setPasswords] = useState({
+    current: '',
+    new: '',
+    confirm: ''
+  });
+  const [changingPass, setChangingPass] = useState(false);
+  const [passMessage, setPassMessage] = useState({ text: '', type: '' });
 
   useEffect(() => {
     fetch('/api/admin/settings')
@@ -57,6 +65,39 @@ export default function SettingsPage() {
       setMessage({ text: 'Error saving settings. Please try again.', type: 'error' });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (passwords.new !== passwords.confirm) {
+      setPassMessage({ text: 'New passwords do not match.', type: 'error' });
+      return;
+    }
+    setChangingPass(true);
+    setPassMessage({ text: '', type: '' });
+
+    try {
+      const res = await fetch('/api/admin/profile/password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          currentPassword: passwords.current,
+          newPassword: passwords.new
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        setPassMessage({ text: 'Password updated successfully!', type: 'success' });
+        setPasswords({ current: '', new: '', confirm: '' });
+      } else {
+        setPassMessage({ text: data.error || 'Failed to update password.', type: 'error' });
+      }
+    } catch {
+      setPassMessage({ text: 'Error updating password.', type: 'error' });
+    } finally {
+      setChangingPass(false);
     }
   };
 
@@ -155,6 +196,62 @@ export default function SettingsPage() {
           <div className={styles.formActions} style={{ marginTop: '2rem' }}>
             <button type="submit" className="btn btn-primary" disabled={saving}>
               {saving ? 'Saving...' : 'Save Settings'}
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <div className={styles.card} style={{ marginTop: '2rem' }}>
+        <form onSubmit={handleChangePassword} className={styles.form}>
+          <div className={styles.formSection}>
+            <h2 className={styles.sectionTitle}>Security</h2>
+            <p className={styles.sectionDescription}>
+              Update your administrator password here.
+            </p>
+
+            <div className={styles.formGrid}>
+              <div className={styles.formGroup}>
+                <label>Current Password</label>
+                <input
+                  type="password"
+                  value={passwords.current}
+                  onChange={(e) => setPasswords({ ...passwords, current: e.target.value })}
+                  placeholder="••••••••"
+                  required
+                />
+              </div>
+              <div className={styles.formGroup}>
+                <label>New Password</label>
+                <input
+                  type="password"
+                  value={passwords.new}
+                  onChange={(e) => setPasswords({ ...passwords, new: e.target.value })}
+                  placeholder="Minimum 8 characters"
+                  required
+                />
+              </div>
+              <div className={styles.formGroup}>
+                <label>Confirm New Password</label>
+                <input
+                  type="password"
+                  value={passwords.confirm}
+                  onChange={(e) => setPasswords({ ...passwords, confirm: e.target.value })}
+                  placeholder="Re-type new password"
+                  required
+                />
+              </div>
+            </div>
+          </div>
+
+          {passMessage.text && (
+            <div className={`alert alert-${passMessage.type}`} style={{ marginTop: '1rem' }}>
+              {passMessage.text}
+            </div>
+          )}
+
+          <div className={styles.formActions} style={{ marginTop: '2rem' }}>
+            <button type="submit" className="btn btn-warning" disabled={changingPass}>
+              {changingPass ? 'Updating...' : 'Update Password'}
             </button>
           </div>
         </form>
