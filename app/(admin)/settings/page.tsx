@@ -250,7 +250,7 @@ export default function SettingsPage() {
           )}
 
           <div className={styles.formActions} style={{ marginTop: '2rem' }}>
-            <button type="submit" className="btn btn-warning" disabled={changingPass}>
+            <button type="submit" className="btn btn-primary" disabled={changingPass}>
               {changingPass ? 'Updating...' : 'Update Password'}
             </button>
           </div>
