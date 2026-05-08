@@ -1,6 +1,6 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { supabaseAdmin as supabase } from '@/lib/supabase';
 
 interface RouteParams { params: { token: string }; }
 
@@ -11,22 +11,30 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
     .eq('private_token', params.token)
     .single();
 
-  if (clientError || !client) return NextResponse.json({ error: 'Invalid approval link.' }, { status: 404 });
+  if (clientError || !client) {
+    console.error('DEBUG: Client not found for token:', params.token);
+    return NextResponse.json({ error: 'Invalid approval link.' }, { status: 404 });
+  }
 
-  // Fetch tasks and comment counts
-  const { data: rawTasks, error: tasksError } = await supabase
+  // Absolute Bulldozer: Fetch EVERYTHING for this client to see what's hidden
+  const { data: allTasks, error: tasksError } = await supabase
     .from('tasks')
     .select(`
-      id, title, image_url, caption, status, created_at, updated_at,
+      id, client_id, title, image_url, caption, status, created_at, updated_at,
       comments (count)
-    `)
-    .eq('client_id', client.id)
-    .neq('status', 'published');
+    `);
 
-  if (tasksError) {
-    console.error('Fetch approval tasks error:', tasksError);
-    return NextResponse.json({ error: 'Failed to fetch tasks.' }, { status: 500 });
+  const clientId = Number(client.id);
+  const rawTasks = (allTasks || []).filter(t => Number(t.client_id) === clientId);
+
+  console.log('--- SYNC DEBUG (BULLDOZER) ---');
+  console.log('Client Name:', client.company_name, '(ID:', clientId, ')');
+  console.log('Total tasks in DB (any client):', allTasks?.length || 0);
+  console.log('Tasks matching this client:', rawTasks.length);
+  if (rawTasks.length > 0) {
+    console.log('Found Task ID:', rawTasks[0].id);
   }
+  console.log('------------------------------');
 
   // Sort tasks in JS to match previous SQLite CASE logic
   const statusPriority: Record<string, number> = {
@@ -46,5 +54,12 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
     return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
   });
 
-  return NextResponse.json({ client, tasks });
+  return NextResponse.json(
+    { client, tasks },
+    { 
+      headers: {
+        'Cache-Control': 'no-store, max-age=0',
+      }
+    }
+  );
 }

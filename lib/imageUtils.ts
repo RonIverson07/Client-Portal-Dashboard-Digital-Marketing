@@ -20,11 +20,6 @@ function extractGoogleDriveFileId(url: string): string | null {
 /**
  * Converts any Google Drive share/view/open/uc link into a direct image URL
  * that loads reliably in browsers without extra redirects.
- *
- * Uses: https://lh3.googleusercontent.com/d/FILE_ID=w1600
- * (confirmed 200 OK, image/png — no auth redirect required for public files)
- *
- * For non-Drive URLs the original URL is returned unchanged.
  */
 export function getDisplayImageUrl(url: string): string {
   if (!url || typeof url !== 'string') return '';
@@ -33,7 +28,13 @@ export function getDisplayImageUrl(url: string): string {
 
   const fileId = extractGoogleDriveFileId(trimmed);
   if (fileId) {
+    // Primary method: Google UserContent (fastest)
     return `https://lh3.googleusercontent.com/d/${fileId}=w1600`;
+  }
+
+  // Handle direct download links if someone pasted one
+  if (trimmed.includes('drive.google.com/uc')) {
+    return trimmed.replace('export=download', 'export=view');
   }
 
   return trimmed;

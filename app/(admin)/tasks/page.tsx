@@ -201,9 +201,10 @@ function TasksContent() {
 
   async function loadData() {
     try {
+      const timestamp = new Date().getTime();
       const [taskRes, clientRes] = await Promise.all([
-        fetch('/api/admin/tasks', { credentials: 'include' }),
-        fetch('/api/admin/clients', { credentials: 'include' }),
+        fetch(`/api/admin/tasks?t=${timestamp}`, { credentials: 'include', cache: 'no-store' }),
+        fetch(`/api/admin/clients?t=${timestamp}`, { credentials: 'include', cache: 'no-store' }),
       ]);
       if (taskRes.status === 401) { router.push('/admin/login'); return; }
       const taskData = await taskRes.json();
@@ -245,7 +246,7 @@ function TasksContent() {
       const url = editTask ? `/api/admin/tasks/${editTask.id}` : '/api/admin/tasks';
       const method = editTask ? 'PUT' : 'POST';
       const body = editTask
-        ? { title: form.title, image_url: form.image_url, caption: form.caption, status: editTask.status }
+        ? { client_id: Number(form.client_id), title: form.title, image_url: form.image_url, caption: form.caption, status: editTask.status }
         : { client_id: Number(form.client_id), title: form.title, image_url: form.image_url, caption: form.caption };
 
       const res = await fetch(url, {
@@ -468,15 +469,13 @@ function TasksContent() {
             </div>
             <form onSubmit={handleSave} className={styles.modalBody}>
               {formError && <div className="alert alert-error">{formError}</div>}
-              {!editTask && (
-                <div className="form-group">
-                  <label>Assign to Client *</label>
-                  <select value={form.client_id} onChange={e => setForm(f => ({ ...f, client_id: e.target.value }))} required>
-                    <option value="">Select a client…</option>
-                    {clients.map(c => <option key={c.id} value={String(c.id)}>{c.company_name}</option>)}
-                  </select>
-                </div>
-              )}
+              <div className="form-group">
+                <label>Assign to Client *</label>
+                <select value={form.client_id} onChange={e => setForm(f => ({ ...f, client_id: e.target.value }))} required>
+                  <option value="">Select a client…</option>
+                  {clients.map(c => <option key={c.id} value={String(c.id)}>{c.company_name}</option>)}
+                </select>
+              </div>
               <div className="form-group">
                 <label>Task Title *</label>
                 <input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="e.g. Instagram Post — Product Launch" required />
@@ -496,11 +495,20 @@ function TasksContent() {
                         src={getDisplayImageUrl(form.image_url)}
                         alt="Preview"
                         style={{ display: 'block', maxHeight: 160, width: '100%', borderRadius: 6, objectFit: 'cover', border: '1px solid var(--color-border)' }}
-                        onError={() => setImgPreviewError(true)}
+                        onError={(e) => {
+                          const fileId = form.image_url.match(/\/file\/d\/([a-zA-Z0-9_-]{10,})/)?.[1];
+                          const target = e.target as HTMLImageElement;
+                          // If primary fails, try secondary UC format
+                          if (fileId && !target.src.includes('uc?export=view')) {
+                            target.src = `https://drive.google.com/uc?export=view&id=${fileId}`;
+                          } else {
+                            setImgPreviewError(true);
+                          }
+                        }}
                       />
                     ) : (
-                      <div style={{ padding: '12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6, fontSize: 12, color: '#b91c1c', lineHeight: 1.5 }}>
-                        Image could not load. Make sure the Google Drive file is shared as &ldquo;Anyone with the link can view.&rdquo;
+                      <div style={{ padding: '12px', background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: 6, fontSize: 12, color: '#92400e', lineHeight: 1.5 }}>
+                        <strong>Note:</strong> Preview couldn&apos;t load. This happens sometimes with Google Drive, but you can still create the task and it may load on the board.
                       </div>
                     )}
                   </div>

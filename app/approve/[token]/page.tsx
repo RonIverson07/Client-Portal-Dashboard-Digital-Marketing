@@ -486,7 +486,11 @@ export default function ApprovalPage() {
   useEffect(() => {
     fetch(`/api/approve/${token}`)
       .then(r => { if (!r.ok) throw new Error('Invalid'); return r.json(); })
-      .then(d => { setClient(d.client); setTasks(d.tasks || []); })
+      .then(d => { 
+        console.log('DEBUG FRONTEND: Received tasks:', d.tasks);
+        setClient(d.client); 
+        setTasks(d.tasks || []); 
+      })
       .catch(() => setError('This approval link is invalid or has expired.'))
       .finally(() => setLoading(false));
   }, [token]);
@@ -506,13 +510,15 @@ export default function ApprovalPage() {
     <div className={styles.page}>
       <header className={styles.header}>
         <div className={styles.headerInner}>
-          {logoUrl ? (
-            <img src={logoUrl} alt={client?.company_name} className={styles.clientLogo}
-              onError={e => { const el = e.target as HTMLImageElement; el.style.display = 'none'; el.insertAdjacentHTML('afterend', `<div class="${styles.clientName}">${client?.company_name}</div>`); }} />
-          ) : (
-            <div className={styles.clientName}>{client?.company_name}</div>
-          )}
-          <h1 className={styles.boardTitle}>Content Approval Board</h1>
+          <div className={styles.headerTop}>
+            {logoUrl ? (
+              <img src={logoUrl} alt={client?.company_name} className={styles.clientLogo}
+                onError={e => { const el = e.target as HTMLImageElement; el.style.display = 'none'; el.insertAdjacentHTML('afterend', `<div class="${styles.clientName}">${client?.company_name}</div>`); }} />
+            ) : (
+              <div className={styles.clientName}>{client?.company_name}</div>
+            )}
+            <h1 className={styles.boardTitle}>Content Approval Board</h1>
+          </div>
           <p className={styles.instruction}>Review each item, then approve it or request changes. Drag cards between columns to update status.</p>
         </div>
       </header>

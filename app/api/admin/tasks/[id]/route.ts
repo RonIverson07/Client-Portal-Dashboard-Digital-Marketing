@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { supabaseAdmin as supabase } from '@/lib/supabase';
 import { getAdminFromRequest } from '@/lib/auth';
 
 interface RouteParams {
@@ -48,7 +48,12 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
   if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
-    const { title, image_url, caption, status } = await req.json();
+    const { client_id, title, image_url, caption, status } = await req.json();
+    console.log('--- TASK UPDATE DEBUG ---');
+    console.log('Updating Task ID:', params.id);
+    console.log('New Client ID received:', client_id);
+    console.log('-------------------------');
+
     if (!title?.trim()) return NextResponse.json({ error: 'Title is required.' }, { status: 400 });
     if (!image_url?.trim()) return NextResponse.json({ error: 'Image URL is required.' }, { status: 400 });
     if (!caption?.trim()) return NextResponse.json({ error: 'Caption is required.' }, { status: 400 });
@@ -69,6 +74,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
     const { data: updatedTask, error: updateError } = await supabase
       .from('tasks')
       .update({
+        client_id: client_id !== undefined ? Number(client_id) : current.client_id,
         title: title.trim(),
         image_url: image_url.trim(),
         caption: caption.trim(),
@@ -83,6 +89,10 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
       .single();
 
     if (updateError) throw updateError;
+
+    console.log('--- TASK UPDATE RESULT ---');
+    console.log('Task ID:', params.id, '| Old client_id:', current.client_id, '| New client_id:', updatedTask?.client_id);
+    console.log('--------------------------');
 
     if (status && status !== current.status) {
       await supabase.from('activity_log').insert([
