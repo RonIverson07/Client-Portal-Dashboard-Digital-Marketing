@@ -483,8 +483,9 @@ export default function ApprovalPage() {
   const [detailTask, setDetailTask] = useState<Task | null>(null);
   const [previewTask, setPreviewTask] = useState<Task | null>(null);
 
-  useEffect(() => {
-    fetch(`/api/approve/${token}`)
+  const loadData = useCallback(() => {
+    const ts = Date.now();
+    fetch(`/api/approve/${token}?t=${ts}`, { cache: 'no-store' })
       .then(r => { if (!r.ok) throw new Error('Invalid'); return r.json(); })
       .then(d => { 
         console.log('DEBUG FRONTEND: Received tasks:', d.tasks);
@@ -494,6 +495,21 @@ export default function ApprovalPage() {
       .catch(() => setError('This approval link is invalid or has expired.'))
       .finally(() => setLoading(false));
   }, [token]);
+
+  // Fetch on mount
+  useEffect(() => { loadData(); }, [loadData]);
+
+  // Re-fetch when user navigates back to the tab or switches focus
+  useEffect(() => {
+    const onFocus = () => loadData();
+    const onVisible = () => { if (document.visibilityState === 'visible') loadData(); };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [loadData]);
 
   const handleStatusChange = useCallback((id: number, status: string) => {
     setTasks(prev => prev.map(t => t.id === id ? { ...t, status } : t));
