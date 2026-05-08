@@ -130,8 +130,21 @@
 .seeMoreBtn:hover { text-decoration: underline; }
 
 .cardActions { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; padding-top: var(--space-2); border-top: 1px solid var(--color-border); }
-.actionBtn { flex: 1; min-width: 90px; }
-.actionBtnSecondary { flex: 1; }
+.actionBtn { 
+  flex: 1; 
+  min-width: 90px; 
+  height: 42px; 
+  display: flex; 
+  align-items: center; 
+  justify-content: center; 
+}
+.actionBtnSecondary { 
+  flex: 1; 
+  height: 42px; 
+  display: flex; 
+  align-items: center; 
+  justify-content: center; 
+}
 .approvedNote { font-size: var(--text-sm); font-weight: 600; color: var(--color-success); flex: 1; }
 .revisionNote { font-size: var(--text-sm); font-weight: 500; color: var(--color-warning); flex: 1; }
 
@@ -245,8 +258,23 @@
   border-top: 1px solid var(--color-border);
   flex-wrap: wrap;
 }
-.mobileCardActions .actionBtn { flex: 1; min-width: 120px; min-height: 44px; font-size: var(--text-sm); }
-.mobileCardActions .actionBtnSecondary { flex: 1; min-height: 44px; font-size: var(--text-sm); }
+.mobileCardActions .actionBtn { 
+  flex: 1; 
+  min-width: 120px; 
+  height: 48px; 
+  font-size: var(--text-sm); 
+  display: flex; 
+  align-items: center; 
+  justify-content: center; 
+}
+.mobileCardActions .actionBtnSecondary { 
+  flex: 1; 
+  height: 48px; 
+  font-size: var(--text-sm); 
+  display: flex; 
+  align-items: center; 
+  justify-content: center; 
+}
 .mobileApprovedNote { font-size: var(--text-sm); font-weight: 600; color: var(--color-success); padding: var(--space-3) 0 var(--space-1); }
 .mobileRevisionNote { font-size: var(--text-sm); font-weight: 500; color: var(--color-warning); padding: var(--space-3) 0 var(--space-1); }
 
