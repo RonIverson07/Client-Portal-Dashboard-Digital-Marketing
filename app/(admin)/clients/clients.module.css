@@ -1,0 +1,163 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  max-width: 900px;
+}
+
+.pageHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.pageTitle {
+  font-size: var(--text-2xl);
+  font-weight: 700;
+}
+
+.pageSubtitle {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  margin-top: var(--space-1);
+}
+
+/* ─── Client list ─────────────────────────────────── */
+.clientList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.clientCard {
+  padding: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.clientHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.clientName {
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+
+.contactInfo {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  margin-top: var(--space-1);
+}
+
+.clientActions {
+  display: flex;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+/* ─── Task stats ─────────────────────────────────── */
+.taskStats {
+  display: flex;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.statItem {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-full);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+}
+
+.statItemReview strong { color: var(--color-review); }
+.statItemApproved strong { color: var(--color-success-btn); }
+.statItemRevision strong { color: var(--color-warning-btn); }
+.statItemPublished strong { color: var(--color-published); }
+
+/* ─── Link section ─────────────────────────────────── */
+.linkSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.linkLabel {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.linkRow {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.linkInput {
+  flex: 1;
+  font-family: monospace;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  background: var(--color-surface-2);
+  cursor: text;
+}
+
+.copyBtn {
+  flex-shrink: 0;
+}
+
+.notes {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+/* ─── Modal ─────────────────────────────────────── */
+.modalHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-6);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.modalTitle {
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+
+.modalBody {
+  padding: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.modalFooter {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  padding-top: var(--space-2);
+}
+
+@media (max-width: 640px) {
+  .linkRow {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .clientActions {
+    flex-direction: column;
+  }
+}
