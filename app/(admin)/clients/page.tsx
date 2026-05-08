@@ -69,7 +69,7 @@ export default function AdminClientsPage() {
 
   async function loadClients() {
     try {
-      const res = await fetch('/api/admin/clients', { credentials: 'include' });
+      const res = await fetch('/api/admin/clients', { credentials: 'include', cache: 'no-store' });
       if (res.status === 401) { router.push('/admin/login'); return; }
       const data = await res.json();
       setClients(data.clients || []);

@@ -50,8 +50,8 @@ export default function AdminDashboardPage() {
   async function loadData() {
     try {
       const [taskRes, clientRes] = await Promise.all([
-        fetch('/api/admin/tasks', { credentials: 'include' }),
-        fetch('/api/admin/clients', { credentials: 'include' }),
+        fetch('/api/admin/tasks', { credentials: 'include', cache: 'no-store' }),
+        fetch('/api/admin/clients', { credentials: 'include', cache: 'no-store' }),
       ]);
 
       if (taskRes.status === 401 || clientRes.status === 401) {

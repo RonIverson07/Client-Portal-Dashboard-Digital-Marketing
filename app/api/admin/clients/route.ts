@@ -3,6 +3,8 @@ import { supabaseAdmin as supabase } from '@/lib/supabase';
 import { getAdminFromRequest } from '@/lib/auth';
 import { nanoid } from 'nanoid';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(req: NextRequest) {
   const admin = getAdminFromRequest(req);
   if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
