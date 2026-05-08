@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/lib/supabase';
 import { sendNotificationEmail } from '@/lib/email';
+import { revalidatePath } from 'next/cache';
 
 interface RouteParams {
   params: { token: string; taskId: string };
@@ -44,6 +45,10 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     console.error('Update task status error:', updateError);
     return NextResponse.json({ error: 'Failed to update status.' }, { status: 500 });
   }
+
+  // Clear cache for the approval page
+  revalidatePath(`/approve/${params.token}`);
+  revalidatePath(`/api/approve/${params.token}`);
 
   // 3. Handle Comment (if revision)
   if (comment && comment.trim()) {

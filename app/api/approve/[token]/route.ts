@@ -58,7 +58,10 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
     { client, tasks },
     { 
       headers: {
-        'Cache-Control': 'no-store, max-age=0',
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'Expires': '0',
+        'Pragma': 'no-cache',
+        'Surrogate-Control': 'no-store'
       }
     }
   );
