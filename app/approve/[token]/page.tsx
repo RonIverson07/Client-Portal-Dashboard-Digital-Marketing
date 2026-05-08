@@ -290,9 +290,24 @@ function ApprovalCard({ task, token, onStatusChange, onCommentAdded, onOpenDetai
           <h3 className={styles.cardTitle}>{task.title}</h3>
           <CaptionPreview text={task.caption} onSeeMore={() => onOpenDetail(task)} />
           <div className={styles.cardActions} onClick={e => e.stopPropagation()}>
-            {s === 'for_review' && (<><button className={`btn btn-success ${styles.actionBtn}`} onClick={handleApprove} disabled={loading !== null}>{loading === 'approved' ? '…' : '✓ Approve'}</button><button className={`btn btn-warning btn-sm ${styles.actionBtnSecondary}`} onClick={e => { e.stopPropagation(); setShowRevModal(true); }} disabled={loading !== null}>Request Revision</button></>)}
-            {s === 'approved' && (<><span className={styles.approvedNote}>✓ Approved</span><button className="btn btn-ghost btn-sm" style={{ opacity: 0.6, fontSize: 11 }} onClick={e => { e.stopPropagation(); setShowRevModal(true); }} disabled={loading !== null}>Request Revision</button></>)}
-            {s === 'for_revision' && (<><span className={styles.revisionNote}>Revision requested</span><button className="btn btn-success btn-sm" onClick={handleApprove} disabled={loading !== null}>{loading === 'approved' ? '…' : 'Approve'}</button></>)}
+            {s === 'for_review' && (
+              <>
+                <button className={`btn btn-success ${styles.actionBtn}`} onClick={handleApprove} disabled={loading !== null}>{loading === 'approved' ? '…' : '✓ Approve'}</button>
+                <button className={`btn btn-warning ${styles.actionBtnSecondary}`} onClick={e => { e.stopPropagation(); setShowRevModal(true); }} disabled={loading !== null}>Request Revision</button>
+              </>
+            )}
+            {s === 'approved' && (
+              <>
+                <span className={styles.approvedNote}>✓ Approved</span>
+                <button className={`btn btn-warning btn-sm ${styles.actionBtnSecondary}`} style={{ flex: 'none', padding: '0 12px' }} onClick={e => { e.stopPropagation(); setShowRevModal(true); }} disabled={loading !== null}>Request Revision</button>
+              </>
+            )}
+            {s === 'for_revision' && (
+              <>
+                <span className={styles.revisionNote}>Revision requested</span>
+                <button className={`btn btn-success btn-sm ${styles.actionBtn}`} style={{ flex: 'none', padding: '0 12px' }} onClick={handleApprove} disabled={loading !== null}>{loading === 'approved' ? '…' : 'Approve'}</button>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -468,11 +483,11 @@ function MobileList({ tasks, token, onStatusChange, onCommentAdded, onOpenDetail
                   </>}
                   {s === 'approved' && <>
                     <span className={styles.mobileApprovedNote}>✓ Approved</span>
-                    <button className="btn btn-ghost btn-sm" style={{ opacity: 0.65 }} onClick={e => { e.stopPropagation(); setRevTaskId(task.id); setShowRevModal(true); }}>Request Revision</button>
+                    <button className={`btn btn-warning btn-sm ${styles.actionBtnSecondary}`} style={{ flex: 'none', padding: '0 12px' }} onClick={e => { e.stopPropagation(); setRevTaskId(task.id); setShowRevModal(true); }}>Request Revision</button>
                   </>}
                   {s === 'for_revision' && <>
                     <span className={styles.mobileRevisionNote}>Revision requested</span>
-                    <button className="btn btn-success btn-sm" onClick={e => handleApprove(e, task)} disabled={loadingId === task.id}>Approve</button>
+                    <button className={`btn btn-success btn-sm ${styles.actionBtn}`} style={{ flex: 'none', padding: '0 12px' }} onClick={e => handleApprove(e, task)} disabled={loadingId === task.id}>Approve</button>
                   </>}
                 </div>
               </div>
