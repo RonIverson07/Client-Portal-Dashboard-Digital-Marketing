@@ -156,10 +156,17 @@ function TaskDetailModal({ task, token, onClose, onStatusChange, onCommentAdded 
   function showToast(msg: string) { setToast(msg); setTimeout(() => setToast(''), 2500); }
 
   async function doStatusUpdate(status: string, commentTxt?: string) {
-    if (commentTxt) await fetch(`/api/approve/${token}/tasks/${task.id}/comments`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ author_name: 'Client', comment_text: commentTxt }) });
-    await fetch(`/api/approve/${token}/tasks/${task.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) });
+    await fetch(`/api/approve/${token}/tasks/${task.id}`, { 
+      method: 'PATCH', 
+      headers: { 'Content-Type': 'application/json' }, 
+      body: JSON.stringify({ status, comment: commentTxt }) 
+    });
+    
     onStatusChange(task.id, status);
-    if (commentTxt) { onCommentAdded(task.id); fetch(`/api/approve/${token}/tasks/${task.id}/comments`).then(r => r.json()).then(d => setComments(d.comments || [])); }
+    if (commentTxt) { 
+      onCommentAdded(task.id); 
+      fetch(`/api/approve/${token}/tasks/${task.id}/comments`).then(r => r.json()).then(d => setComments(d.comments || [])); 
+    }
   }
 
   async function handleApprove() { setStatusLoading('approved'); await doStatusUpdate('approved'); showToast('Approved ✓'); setStatusLoading(null); }
@@ -275,7 +282,7 @@ function ApprovalCard({ task, token, onStatusChange, onCommentAdded, onOpenDetai
         <div className={styles.cardImgWrap} onClick={e => { e.stopPropagation(); onOpenImage(task); }} title="Click to enlarge">
           <img src={displayImg} alt={task.title} className={styles.cardImg}
             onError={e => { (e.target as HTMLImageElement).src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="220"><rect fill="%23f3f4f6" width="400" height="220"/><text fill="%239ca3af" font-family="sans-serif" font-size="13" x="50%" y="50%" text-anchor="middle" dy=".3em">Image unavailable</text></svg>'; }} />
-          <div className={styles.cardImgOverlay}>Enlarge</div>
+          <div className={styles.cardImgOverlay}><span style={{ fontSize: '20px' }}>🔍</span></div>
           <div className={styles.dragHint}>⠿ Drag to move</div>
         </div>
         <div className={styles.cardBody}>
@@ -329,9 +336,13 @@ function KanbanBoard({ tasks, token, onStatusChange, onCommentAdded, onOpenDetai
   async function handleRevisionFromDrop(text: string) {
     if (!pendingRevision) return;
     const { taskId } = pendingRevision; setPendingRevision(null);
-    await fetch(`/api/approve/${token}/tasks/${taskId}/comments`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ author_name: 'Client', comment_text: text }) });
-    await fetch(`/api/approve/${token}/tasks/${taskId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'for_revision' }) });
-    onStatusChange(taskId, 'for_revision'); onCommentAdded(taskId);
+    await fetch(`/api/approve/${token}/tasks/${taskId}`, { 
+      method: 'PATCH', 
+      headers: { 'Content-Type': 'application/json' }, 
+      body: JSON.stringify({ status: 'for_revision', comment: text }) 
+    });
+    onStatusChange(taskId, 'for_revision');
+    onCommentAdded(taskId);
   }
 
   return (
@@ -399,8 +410,11 @@ function MobileList({ tasks, token, onStatusChange, onCommentAdded, onOpenDetail
     if (!revTaskId) return;
     setShowRevModal(false);
     setLoadingId(revTaskId);
-    await fetch(`/api/approve/${token}/tasks/${revTaskId}/comments`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ author_name: 'Client', comment_text: text }) });
-    await fetch(`/api/approve/${token}/tasks/${revTaskId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'for_revision' }) });
+    await fetch(`/api/approve/${token}/tasks/${revTaskId}`, { 
+      method: 'PATCH', 
+      headers: { 'Content-Type': 'application/json' }, 
+      body: JSON.stringify({ status: 'for_revision', comment: text }) 
+    });
     onStatusChange(revTaskId, 'for_revision');
     onCommentAdded(revTaskId);
     showToast('Revision requested ✓');
@@ -438,7 +452,7 @@ function MobileList({ tasks, token, onStatusChange, onCommentAdded, onOpenDetail
                 <img src={displayImg} alt={task.title} className={styles.mobileCardImg}
                   onError={e => { (e.target as HTMLImageElement).src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="220"><rect fill="%23f3f4f6" width="400" height="220"/><text fill="%239ca3af" font-family="sans-serif" font-size="13" x="50%" y="50%" text-anchor="middle" dy=".3em">Image unavailable</text></svg>'; }}
                 />
-                <button className={styles.mobileCardEnlargeBtn} onClick={e => { e.stopPropagation(); onOpenImage(task); }}>🔍 Enlarge</button>
+                <button className={styles.mobileCardEnlargeBtn} onClick={e => { e.stopPropagation(); onOpenImage(task); }} title="Enlarge image">🔍</button>
               </div>
               <div className={styles.mobileCardBody}>
                 <div className={styles.mobileCardTopRow}>

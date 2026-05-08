@@ -24,7 +24,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
 
   if (taskError || !task) return NextResponse.json({ error: 'Task not found.' }, { status: 404 });
 
-  const { status } = await req.json();
+  const { status, comment } = await req.json();
   const validStatuses = ['for_review', 'approved', 'for_revision'];
   if (!status || !validStatuses.includes(status)) {
     return NextResponse.json({ error: 'Invalid status.' }, { status: 400 });
@@ -45,6 +45,18 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ error: 'Failed to update status.' }, { status: 500 });
   }
 
+  // 3. Handle Comment (if revision)
+  if (comment && comment.trim()) {
+    await supabase.from('comments').insert([
+      { 
+        task_id: params.taskId, 
+        client_id: client.id, 
+        author_name: 'Client', 
+        comment_text: comment.trim() 
+      }
+    ]);
+  }
+
   await supabase.from('activity_log').insert([
     { 
       task_id: params.taskId, 
@@ -62,12 +74,33 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     if (settings?.notification_email) {
       const statusLabel = status === 'approved' ? 'Approved' : status === 'for_revision' ? 'Revision Requested' : status;
       const subject = `[${client.company_name}] Task ${statusLabel}: ${task.title}`;
+      const getDisplayImageUrl = (url: string) => {
+        if (!url) return null;
+        const driveMatch = url.match(/(?:\/d\/|id=)([a-zA-Z0-9_-]{25,})/);
+        if (driveMatch) return `https://lh3.googleusercontent.com/d/${driveMatch[1]}`;
+        return url;
+      };
+      const imageUrl = getDisplayImageUrl(task.image_url);
+
       const html = `
-        <div style="font-family: sans-serif; line-height: 1.5; color: #333;">
-          <h2 style="color: #2563eb;">Task Status Updated</h2>
+        <div style="font-family: sans-serif; line-height: 1.5; color: #333; max-width: 600px; border: 1px solid #eee; padding: 20px; border-radius: 8px;">
+          <h2 style="color: #2563eb; margin-top: 0;">Task Status Updated</h2>
           <p><strong>Client:</strong> ${client.company_name}</p>
           <p><strong>Task:</strong> ${task.title}</p>
           <p><strong>New Status:</strong> <span style="padding: 4px 8px; border-radius: 4px; background: ${status === 'approved' ? '#dcfce7' : '#fef9c3'}; color: ${status === 'approved' ? '#166534' : '#854d0e'};">${statusLabel}</span></p>
+          
+          ${imageUrl ? `
+            <div style="margin: 20px 0;">
+              <img src="${imageUrl}" alt="${task.title}" style="max-width: 100%; border-radius: 8px; border: 1px solid #eee;" />
+            </div>
+          ` : ''}
+
+          ${comment ? `
+            <div style="margin-top: 15px; padding: 15px; background: #f8fafc; border-left: 4px solid #eab308; font-style: italic;">
+              <strong>Revision Note:</strong><br/>
+              "${comment}"
+            </div>
+          ` : ''}
           <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
           <p style="font-size: 14px; color: #666;">View this task in your <a href="${process.env.NEXT_PUBLIC_APP_URL}/dashboard">Admin Dashboard</a>.</p>
         </div>

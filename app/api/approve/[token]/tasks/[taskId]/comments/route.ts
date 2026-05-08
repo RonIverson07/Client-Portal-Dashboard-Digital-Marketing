@@ -49,7 +49,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
   const { data: task, error: taskError } = await supabase
     .from('tasks')
-    .select('id, title')
+    .select('id, title, image_url')
     .eq('id', params.taskId)
     .eq('client_id', client.id)
     .single();
@@ -98,11 +98,26 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     const { data: settings } = await supabase.from('settings').select('notification_email').eq('id', 1).single();
     if (settings?.notification_email) {
       const subject = `[${client.company_name}] New Comment on: ${task.title}`;
+      const getDisplayImageUrl = (url: string) => {
+        if (!url) return null;
+        const driveMatch = url.match(/(?:\/d\/|id=)([a-zA-Z0-9_-]{25,})/);
+        if (driveMatch) return `https://lh3.googleusercontent.com/d/${driveMatch[1]}`;
+        return url;
+      };
+      const imageUrl = getDisplayImageUrl(task.image_url);
+
       const html = `
-        <div style="font-family: sans-serif; line-height: 1.5; color: #333;">
-          <h2 style="color: #2563eb;">New Client Comment</h2>
+        <div style="font-family: sans-serif; line-height: 1.5; color: #333; max-width: 600px; border: 1px solid #eee; padding: 20px; border-radius: 8px;">
+          <h2 style="color: #2563eb; margin-top: 0;">New Client Comment</h2>
           <p><strong>Client:</strong> ${client.company_name}</p>
           <p><strong>Task:</strong> ${task.title}</p>
+          
+          ${imageUrl ? `
+            <div style="margin: 20px 0;">
+              <img src="${imageUrl}" alt="${task.title}" style="max-width: 100%; border-radius: 8px; border: 1px solid #eee;" />
+            </div>
+          ` : ''}
+
           <div style="margin: 20px 0; padding: 15px; background: #f8fafc; border-left: 4px solid #2563eb; font-style: italic;">
             "${sanitizedText}"
           </div>
