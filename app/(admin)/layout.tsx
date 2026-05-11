@@ -14,7 +14,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   useEffect(() => {
     const stored = typeof window !== 'undefined' ? localStorage.getItem('admin_user') : null;
     if (stored) {
-      try { setUser(JSON.parse(stored)); } catch {}
+      try { setUser(JSON.parse(stored)); } catch { }
     }
   }, []);
 
@@ -28,6 +28,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { href: '/dashboard', label: 'Dashboard' },
     { href: '/clients', label: 'Clients' },
     { href: '/tasks', label: 'Tasks' },
+    { href: '/spaces', label: 'Spaces' },
     { href: '/requests', label: 'Requests' },
     { href: '/settings', label: 'Settings' },
   ];

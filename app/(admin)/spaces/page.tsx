@@ -1,0 +1,946 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import styles from './spaces.module.css';
+
+// Interfaces for our local structural state
+interface Space { id: string; name: string; color?: string; }
+interface Folder { id: string; spaceId: string; name: string; color?: string; }
+interface List { id: string; parentId: string; name: string; color?: string; }
+interface SpaceTask { 
+  id: string; 
+  listId: string; 
+  title: string; 
+  status: string;
+  assignee?: string;
+  dueDate?: string;
+  priority?: 'Urgent' | 'High' | 'Normal' | 'Low' | 'Clear';
+  description?: string;
+}
+
+const FOLDER_COLORS = ['#f59e0b', '#3b82f6', '#10b981', '#ef4444', '#8b5cf6', '#ec4899', '#6366f1'];
+const PRIORITIES = ['Urgent', 'High', 'Normal', 'Low', 'Clear'];
+
+const getStatusStyles = (status: string) => {
+  // We normalize to handle custom renamed statuses by checking original names or using a default
+  const normalized = status.toUpperCase();
+  if (normalized.includes('TODO') || normalized.includes('DO')) return { color: '#64748b', bg: '#f1f5f9' };
+  if (normalized.includes('PLAN')) return { color: '#8b5cf6', bg: '#f5f3ff' };
+  if (normalized.includes('PROGRESS')) return { color: '#3b82f6', bg: '#eff6ff' };
+  if (normalized.includes('RISK')) return { color: '#f59e0b', bg: '#fffbeb' };
+  if (normalized.includes('UPDATE') || normalized.includes('REQ')) return { color: '#d97706', bg: '#fefce8' };
+  if (normalized.includes('HOLD')) return { color: '#92400e', bg: '#fff7ed' };
+  if (normalized.includes('COMPLETE') || normalized.includes('DONE')) return { color: '#10b981', bg: '#ecfdf5' };
+  if (normalized.includes('CANCEL')) return { color: '#ef4444', bg: '#fef2f2' };
+  return { color: '#64748b', bg: '#f1f5f9' };
+};
+
+export default function SpacesPage() {
+  const [spaces, setSpaces] = useState<Space[]>([]);
+  const [folders, setFolders] = useState<Folder[]>([]);
+  const [lists, setLists] = useState<List[]>([]);
+  const [tasks, setTasks] = useState<SpaceTask[]>([]);
+  const [statuses, setStatuses] = useState(['TO DO', 'PLANNING', 'IN PROGRESS', 'AT RISK', 'UPDATE REQUIRED', 'ON HOLD', 'COMPLETE', 'CANCELLED']);
+  
+  // Selection state
+  const [activeItem, setActiveItem] = useState<{type: 'space'|'folder'|'list', id: string} | null>(null);
+  const [activeView, setActiveView] = useState<'board' | 'list' | 'calendar'>('list');
+  const [viewDate, setViewDate] = useState(new Date());
+
+  const [loading, setLoading] = useState(true);
+
+  // Load from database on mount
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const [hierarchyRes, tasksRes] = await Promise.all([
+        fetch('/api/admin/spaces'),
+        fetch('/api/admin/project-tasks')
+      ]);
+
+      if (hierarchyRes.ok && tasksRes.ok) {
+        const hierarchy = await hierarchyRes.json();
+        const taskData = await tasksRes.json();
+
+        setSpaces(hierarchy.spaces || []);
+        setFolders(hierarchy.folders || []);
+        setLists(hierarchy.lists || []);
+        setTasks(taskData.tasks || []);
+        
+        // Auto-select first list if nothing selected
+        if (!activeItem && hierarchy.lists?.length > 0) {
+          setActiveItem({ type: 'list', id: hierarchy.lists[0].id });
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const generateId = () => Math.random().toString(36).substr(2, 9);
+  const [modalConfig, setModalConfig] = useState<{ 
+    isOpen: boolean; 
+    type: 'Space' | 'Folder' | 'List' | 'Task' | 'Rename' | 'Delete' | 'Move' | 'Color'; 
+    targetId?: string; 
+    targetType?: 'space' | 'folder' | 'list' | 'statusGroup' | 'task';
+    inputValue: string;
+    moveTargetId?: string;
+    // Task specific fields
+    description: string;
+    assignee: string;
+    dueDate: string;
+    priority: 'Urgent' | 'High' | 'Normal' | 'Low' | 'Clear';
+  }>({
+    isOpen: false,
+    type: 'Space',
+    inputValue: '',
+    description: '',
+    assignee: '',
+    dueDate: '',
+    priority: 'Normal'
+  });
+
+  const openModal = (type: 'Space' | 'Folder' | 'List' | 'Task' | 'Rename' | 'Delete' | 'Move' | 'Color', targetId?: string, targetType?: 'space' | 'folder' | 'list' | 'statusGroup' | 'task', initialValue: string = '') => {
+    setModalConfig({ 
+      isOpen: true, 
+      type, 
+      targetId, 
+      targetType, 
+      inputValue: initialValue, 
+      moveTargetId: '',
+      description: '',
+      assignee: '',
+      dueDate: '',
+      priority: 'Normal'
+    });
+  };
+
+  const closeModal = () => {
+    setModalConfig({ ...modalConfig, isOpen: false });
+  };
+
+  const handleModalSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const { type, targetId, targetType, inputValue, moveTargetId, description, assignee, dueDate, priority } = modalConfig;
+
+    try {
+      if (type === 'Delete' && targetId && targetType) {
+        const url = targetType === 'task' ? `/api/admin/project-tasks?id=${targetId}` : `/api/admin/spaces?id=${targetId}&type=${targetType}`;
+        const res = await fetch(url, { method: 'DELETE' });
+        if (res.ok) {
+          performDelete(targetType, targetId);
+          closeModal();
+        }
+        return;
+      }
+
+      if (type === 'Move' && targetId && targetType && moveTargetId) {
+        const url = targetType === 'task' ? '/api/admin/project-tasks' : '/api/admin/spaces';
+        const res = await fetch(url, {
+          method: 'PATCH',
+          body: JSON.stringify({ type: targetType, id: targetId, parent_id: moveTargetId, list_id: moveTargetId })
+        });
+        if (res.ok) {
+          const updated = await res.json();
+          if (targetType === 'list') setLists(lists.map(l => l.id === targetId ? updated : l));
+          else if (targetType === 'task') setTasks(tasks.map(t => t.id === targetId ? updated : t));
+          closeModal();
+        }
+        return;
+      }
+
+      if (type === 'Space') {
+        const res = await fetch('/api/admin/spaces', {
+          method: 'POST',
+          body: JSON.stringify({ type: 'space', name: inputValue })
+        });
+        if (res.ok) {
+          const newItem = await res.json();
+          setSpaces([...spaces, newItem]);
+        }
+      } else if (type === 'Folder' && targetId) {
+        const res = await fetch('/api/admin/spaces', {
+          method: 'POST',
+          body: JSON.stringify({ type: 'folder', space_id: targetId, name: inputValue, color: FOLDER_COLORS[0] })
+        });
+        if (res.ok) {
+          const newItem = await res.json();
+          setFolders([...folders, newItem]);
+        }
+      } else if (type === 'List' && targetId) {
+        const res = await fetch('/api/admin/spaces', {
+          method: 'POST',
+          body: JSON.stringify({ type: 'list', parent_id: targetId, name: inputValue })
+        });
+        if (res.ok) {
+          const newItem = await res.json();
+          setLists([...lists, newItem]);
+        }
+      } else if (type === 'Task' && targetId) {
+        const res = await fetch('/api/admin/project-tasks', {
+          method: 'POST',
+          body: JSON.stringify({ 
+            list_id: targetId, 
+            title: inputValue, 
+            status: 'TO DO',
+            description,
+            assignee,
+            due_date: dueDate,
+            priority
+          })
+        });
+        if (res.ok) {
+          const newItem = await res.json();
+          setTasks([...tasks, newItem]);
+        }
+      } else if (type === 'Rename' && targetId && targetType) {
+        const url = targetType === 'task' ? '/api/admin/project-tasks' : '/api/admin/spaces';
+        const res = await fetch(url, {
+          method: 'PATCH',
+          body: JSON.stringify({ type: targetType, id: targetId, name: inputValue, title: inputValue })
+        });
+        if (res.ok) {
+          const updated = await res.json();
+          if (targetType === 'space') setSpaces(spaces.map(s => s.id === targetId ? updated : s));
+          else if (targetType === 'folder') setFolders(folders.map(f => f.id === targetId ? updated : f));
+          else if (targetType === 'list') setLists(lists.map(l => l.id === targetId ? updated : l));
+          else if (targetType === 'task') setTasks(tasks.map(t => t.id === targetId ? updated : t));
+        }
+      }
+      closeModal();
+    } catch (e) {
+      console.error('Modal submit error:', e);
+    }
+  };
+
+  const performDelete = (type: 'space' | 'folder' | 'list' | 'statusGroup' | 'task', id: string) => {
+    if (type === 'space') {
+      setSpaces(spaces.filter(s => s.id !== id));
+      setFolders(folders.filter(f => f.spaceId !== id));
+      setLists(lists.filter(l => l.parentId !== id));
+    } else if (type === 'folder') {
+      setFolders(folders.filter(f => f.id !== id));
+      setLists(lists.filter(l => l.parentId !== id));
+    } else if (type === 'list') {
+      setLists(lists.filter(l => l.id !== id));
+      setTasks(tasks.filter(t => t.listId !== id));
+    } else if (type === 'task') {
+      setTasks(tasks.filter(t => t.id !== id));
+    }
+    if (activeItem?.id === id) setActiveItem(null);
+  };
+
+  const addSpace = () => openModal('Space');
+  const addFolder = (spaceId: string) => openModal('Folder', spaceId);
+  const addList = (parentId: string) => openModal('List', parentId);
+
+  const addTask = (listId: string) => openModal('Task', listId);
+
+  const performDuplicate = async (type: 'space' | 'folder' | 'list', id: string) => {
+    try {
+      const res = await fetch('/api/admin/spaces', {
+        method: 'POST',
+        body: JSON.stringify({ type: 'duplicate', itemType: type, id })
+      });
+      if (res.ok) {
+        fetchData(); // Refresh everything from DB to get the new items
+      }
+    } catch (e) { console.error(e); }
+  };
+
+  const updateItemColor = async (id: string, type: 'space' | 'folder' | 'list' | 'statusGroup' | 'task', color: string) => {
+    try {
+      const res = await fetch('/api/admin/spaces', {
+        method: 'PATCH',
+        body: JSON.stringify({ type, id, color })
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        if (type === 'space') setSpaces(spaces.map(s => s.id === id ? updated : s));
+        else if (type === 'folder') setFolders(folders.map(f => f.id === id ? updated : f));
+        else if (type === 'list') setLists(lists.map(l => l.id === id ? updated : l));
+      }
+      closeModal();
+    } catch (e) { console.error(e); }
+  };
+
+  // Drag and drop state
+  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
+
+  const handleDragStart = (e: React.DragEvent, id: string) => {
+    setDraggedTaskId(id);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
+  const handleDrop = (e: React.DragEvent, newStatus: string) => {
+    e.preventDefault();
+    if (!draggedTaskId) return;
+    setTasks(prev => prev.map(t => t.id === draggedTaskId ? { ...t, status: newStatus } : t));
+    setDraggedTaskId(null);
+  };
+
+  // Expand/Collapse State
+  const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
+
+  const toggleExpand = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    setExpandedItems(prev => ({ ...prev, [id]: prev[id] === false ? true : false }));
+  };
+
+  const isExpanded = (id: string) => expandedItems[id] !== false;
+
+  // Context Menu State
+  const [contextMenu, setContextMenu] = useState<{ x: number, y: number, type: 'space' | 'folder' | 'list' | 'statusGroup' | 'task', id: string, extra?: any } | null>(null);
+
+  const handleContextMenu = (e: React.MouseEvent, type: 'space' | 'folder' | 'list' | 'statusGroup' | 'task', id: string, extra?: any) => {
+    e.preventDefault();
+    e.stopPropagation();
+    console.log('ContextMenu Triggered:', type, id);
+    setContextMenu({ x: e.clientX, y: e.clientY, type, id, extra });
+  };
+
+  const closeContextMenu = () => {
+    setContextMenu(null);
+  };
+
+  const [collapsedStatuses, setCollapsedStatuses] = useState<Record<string, boolean>>({});
+  const toggleStatusCollapse = (status: string) => {
+    setCollapsedStatuses(prev => ({ ...prev, [status]: !prev[status] }));
+  };
+
+  // Get current tasks to display
+  let currentTasks: SpaceTask[] = [];
+
+  if (activeItem) {
+    if (activeItem.type === 'list') {
+      currentTasks = tasks.filter(t => t.listId === activeItem.id);
+    } else if (activeItem.type === 'folder') {
+      const folderLists = lists.filter(l => l.parentId === activeItem.id).map(l => l.id);
+      currentTasks = tasks.filter(t => folderLists.includes(t.listId));
+    } else if (activeItem.type === 'space') {
+      const spaceFolders = folders.filter(f => f.spaceId === activeItem.id).map(f => f.id);
+      const spaceLists = lists.filter(l => l.parentId === activeItem.id || spaceFolders.includes(l.parentId)).map(l => l.id);
+      currentTasks = tasks.filter(t => spaceLists.includes(t.listId));
+    }
+  }
+
+  // Icons
+  const IconSpace = ({ color = '#10b981' }: { color?: string }) => <svg width="12" height="12" viewBox="0 0 24 24" fill={color} style={{borderRadius: '2px'}}><rect width="24" height="24" rx="4"/></svg>;
+  const IconFolder = ({ color = '#f59e0b' }: { color?: string }) => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" fill={color} fillOpacity="0.1"/></svg>;
+  const IconList = ({ color = '#94a3b8' }: { color?: string }) => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>;
+
+  const getItemName = (type: string, id: string) => {
+    if (type === 'space') return spaces.find(s => s.id === id)?.name || '';
+    if (type === 'folder') return folders.find(f => f.id === id)?.name || '';
+    if (type === 'list') return lists.find(l => l.id === id)?.name || '';
+    return '';
+  };
+
+  const deleteTask = (id: string) => {
+    setTasks(tasks.filter(t => t.id !== id));
+  };
+
+  return (
+    <div className={styles.container} onClick={closeContextMenu}>
+      <div className={styles.content}>
+        
+        {/* Hierarchical Sidebar */}
+        <div className={styles.sidebar}>
+          <div className={styles.sidebarHeader}>
+            Spaces
+            <button className={styles.addBtn} onClick={addSpace} title="Add Space">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            </button>
+          </div>
+          
+          <div className={styles.hierarchyList}>
+            {spaces.map(space => (
+              <div key={space.id}>
+                {/* Space Row */}
+                <div 
+                  className={`${styles.treeItem} ${activeItem?.id === space.id ? styles.treeItemActive : ''}`}
+                  onClick={() => setActiveItem({ type: 'space', id: space.id })}
+                  onContextMenu={(e) => handleContextMenu(e, 'space', space.id)}
+                >
+                  <button className={styles.chevronBtn} onClick={(e) => toggleExpand(e, space.id)}>
+                    {isExpanded(space.id) ? '▼' : '▶'}
+                  </button>
+                  <div className={styles.treeIcon}><IconSpace color={space.color} /></div>
+                  <div style={{ flex: 1 }}>{space.name}</div>
+                  <button className={styles.addBtn} onClick={(e) => { e.stopPropagation(); addFolder(space.id); }} title="Add Folder">+</button>
+                </div>
+                
+                {isExpanded(space.id) && (
+                  <>
+                    {/* Folders in Space */}
+                    {folders.filter(f => f.spaceId === space.id).map(folder => (
+                      <div key={folder.id}>
+                        <div 
+                          className={`${styles.treeItem} ${styles.indentLevel1} ${activeItem?.id === folder.id ? styles.treeItemActive : ''}`}
+                          onClick={() => setActiveItem({ type: 'folder', id: folder.id })}
+                          onContextMenu={(e) => handleContextMenu(e, 'folder', folder.id)}
+                        >
+                          <button className={styles.chevronBtn} onClick={(e) => toggleExpand(e, folder.id)}>
+                            {isExpanded(folder.id) ? '▼' : '▶'}
+                          </button>
+                          <div className={styles.treeIcon}><IconFolder color={folder.color} /></div>
+                          <div style={{ flex: 1 }}>{folder.name}</div>
+                          <button className={styles.addBtn} onClick={(e) => { e.stopPropagation(); addList(folder.id); }} title="Add List">+</button>
+                        </div>
+                        
+                        {isExpanded(folder.id) && (
+                          <>
+                            {/* Lists in Folder */}
+                            {lists.filter(l => l.parentId === folder.id).map(list => (
+                              <div 
+                                key={list.id}
+                                className={`${styles.treeItem} ${styles.indentLevel2} ${activeItem?.id === list.id ? styles.treeItemActive : ''}`}
+                                onClick={() => setActiveItem({ type: 'list', id: list.id })}
+                                onContextMenu={(e) => handleContextMenu(e, 'list', list.id)}
+                              >
+                                <div className={styles.treeIcon} style={{marginLeft: '24px'}}><IconList color={list.color} /></div>
+                                <div>{list.name}</div>
+                              </div>
+                            ))}
+                          </>
+                        )}
+                      </div>
+                    ))}
+
+                    {/* Independent Lists in Space */}
+                    {lists.filter(l => l.parentId === space.id).map(list => (
+                      <div 
+                        key={list.id} 
+                        className={`${styles.treeItem} ${styles.indentLevel1} ${activeItem?.id === list.id ? styles.treeItemActive : ''}`}
+                        onClick={() => setActiveItem({ type: 'list', id: list.id })}
+                        onContextMenu={(e) => handleContextMenu(e, 'list', list.id)}
+                      >
+                        <div className={styles.treeIcon} style={{marginLeft: '24px'}}><IconList color={list.color} /></div>
+                        <div>{list.name}</div>
+                      </div>
+                    ))}
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Main Content Area */}
+        <div className={styles.mainPane}>
+          <div className={styles.mainHeader}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <div style={{ fontSize: '24px', fontWeight: 700, color: '#0f172a' }}>
+                {activeItem?.type === 'list' ? lists.find(l => l.id === activeItem.id)?.name : 
+                 activeItem?.type === 'folder' ? folders.find(f => f.id === activeItem.id)?.name :
+                 activeItem?.type === 'space' ? spaces.find(s => s.id === activeItem.id)?.name : 'Overview'}
+              </div>
+            </div>
+            
+            {activeItem && (
+              <div className={styles.viewTabs} style={{ marginTop: 'auto', marginBottom: '-1px' }}>
+                <button className={`${styles.tabBtn} ${activeView === 'list' ? styles.tabActive : ''}`} onClick={() => setActiveView('list')}>List</button>
+                <button className={`${styles.tabBtn} ${activeView === 'board' ? styles.tabActive : ''}`} onClick={() => setActiveView('board')}>Board</button>
+                <button className={`${styles.tabBtn} ${activeView === 'calendar' ? styles.tabActive : ''}`} onClick={() => setActiveView('calendar')}>Calendar</button>
+                
+                {/* Add Task button for active List */}
+                {activeItem.type === 'list' && (
+                  <button className="btn btn-primary btn-sm" style={{ marginLeft: '24px', borderRadius: '6px', fontWeight: 600 }} onClick={() => addTask(activeItem.id)}>+ Add Task</button>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className={styles.dataArea} style={{ padding: '24px' }}>
+            {activeItem && activeView === 'board' && (
+              <div className={styles.boardContainer}>
+                {statuses.map(status => {
+                  const colTasks = currentTasks.filter(t => t.status === status);
+                  const { color: statusColor, bg: statusBg } = getStatusStyles(status);
+                  
+                  const isCollapsed = collapsedStatuses[status];
+                  
+                  return (
+                    <div 
+                      key={status} 
+                      className={`${styles.boardColumn} ${isCollapsed ? styles.boardColumnCollapsed : ''}`}
+                      onDragOver={handleDragOver}
+                      onDrop={(e) => handleDrop(e, status)}
+                      onClick={() => isCollapsed && toggleStatusCollapse(status)}
+                      style={{ cursor: isCollapsed ? 'pointer' : 'default' }}
+                    >
+                      <div className={styles.columnHeader} style={{ background: statusBg, color: statusColor }}>
+                        <div style={{ display: 'flex', alignItems: 'center' }}>
+                          <div className={styles.statusIconCircle} style={{ width: '10px', height: '10px', borderWidth: '1.5px', borderColor: statusColor, marginRight: '6px' }}></div>
+                          {status}
+                          {!isCollapsed && <span className={styles.statusCount} style={{ fontSize: '10px' }}>{colTasks.length}</span>}
+                        </div>
+                        {!isCollapsed && <button className={styles.addBtn} style={{ padding: '0 4px', fontSize: '16px' }} onClick={(e) => { e.stopPropagation(); handleContextMenu(e, 'statusGroup', status); }}>⋯</button>}
+                      </div>
+                      
+                      {colTasks.map(task => (
+                        <div 
+                          key={task.id} 
+                          className={styles.taskCard}
+                          draggable
+                          onDragStart={(e) => handleDragStart(e, task.id)}
+                          onContextMenu={(e) => handleContextMenu(e, 'task', task.id)}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                            <div style={{ fontSize: '14px', fontWeight: 500, color: '#1e293b' }}>{task.title}</div>
+                            <button className={styles.addBtn} style={{ padding: '0 4px', fontSize: '16px', marginTop: '-4px' }} onClick={(e) => { e.stopPropagation(); handleContextMenu(e, 'task', task.id); }}>⋯</button>
+                          </div>
+                          
+                          <div className={styles.cardFooter}>
+                            <div className={styles.cardFooterIcon} title="Assignee">
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                            </div>
+                            
+                            {task.dueDate && (
+                              <div className={styles.cardFooterIcon} title="Due Date">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                                {task.dueDate}
+                              </div>
+                            )}
+
+                            <div className={styles.cardFooterIcon} title="Priority">
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={task.priority === 'Urgent' ? '#ef4444' : task.priority === 'High' ? '#f59e0b' : '#3b82f6'} strokeWidth="2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+
+                      {activeItem.type === 'list' && status === 'TO DO' && (
+                        <div className={styles.boardAddTask} onClick={() => addTask(activeItem.id)}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                          Add Task
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            
+            {activeItem && activeView === 'list' && (
+              <div className={styles.listViewContainer}>
+                {statuses.map(status => {
+                  const colTasks = currentTasks.filter(t => t.status === status);
+                  const { color: statusColor, bg: statusBg } = getStatusStyles(status);
+                  
+                  return (
+                    <div key={status} className={styles.statusGroup}>
+                      <div className={styles.statusGroupHeader} style={{ background: statusBg, color: statusColor }}>
+                        {status}
+                        <span className={styles.statusCount}>{colTasks.length}</span>
+                      </div>
+                      
+                      <div className={styles.listViewHeader}>
+                        <div>Name</div>
+                        <div>Assignee</div>
+                        <div>Due Date</div>
+                        <div>Priority</div>
+                        <div></div>
+                      </div>
+
+                      {colTasks.map(task => (
+                        <div key={task.id} className={styles.listRow}>
+                          <div className={styles.taskNameCell}>
+                            <div className={styles.statusIconCircle} style={{ borderColor: statusColor }}>
+                              {status === 'COMPLETE' && <svg width="8" height="8" viewBox="0 0 24 24" fill={statusColor}><path d="M20.285 2l-11.285 11.567-5.286-5.011-3.714 3.716 9 8.728 15-15.285z"/></svg>}
+                            </div>
+                            <span style={{ color: status === 'COMPLETE' ? '#94a3b8' : 'inherit', textDecoration: status === 'COMPLETE' ? 'line-through' : 'none' }}>
+                              {task.title}
+                            </span>
+                          </div>
+                          
+                          <div className={styles.cellIcon}>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                          </div>
+                          
+                          <div className={styles.cellIcon} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px' }}>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                            {task.dueDate || ''}
+                          </div>
+                          
+                          <div className={styles.cellIcon}>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={task.priority === 'Urgent' ? '#ef4444' : task.priority === 'High' ? '#f59e0b' : '#3b82f6'} strokeWidth="2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+                          </div>
+
+                          <div className={styles.cellIcon}>
+                            <button className={styles.addBtn} style={{ padding: '0 4px', fontSize: '16px' }} onClick={(e) => { e.stopPropagation(); handleContextMenu(e, 'task', task.id); }}>⋯</button>
+                          </div>
+                        </div>
+                      ))}
+
+                      {activeItem.type === 'list' && status === 'TO DO' && (
+                        <div className={styles.addTaskRow} onClick={() => addTask(activeItem.id)}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                          Add Task
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {activeItem && activeView === 'calendar' && (
+              <div className={styles.calendarContainer}>
+                <div className={styles.calendarHeader}>
+                  <div className={styles.calendarHeaderLeft}>
+                    <button className={styles.todayBtn} onClick={() => setViewDate(new Date())}>Today</button>
+                    <div className={styles.dateNav}>
+                      <button className={styles.navBtn} onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1))}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m15 18-6-6 6-6"/></svg>
+                      </button>
+                      <button className={styles.navBtn} onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1))}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m9 18 6-6-6-6" transform="rotate(180 12 12)"/></svg>
+                      </button>
+                    </div>
+                    <div className={styles.currentMonth}>
+                      {viewDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
+                    </div>
+                  </div>
+                </div>
+
+                <div className={styles.calendarGrid}>
+                  {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                    <div key={day} className={styles.weekdayHeader}>{day}</div>
+                  ))}
+                  
+                  {(() => {
+                    const days = [];
+                    const startOfMonth = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1);
+                    const endOfMonth = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 0);
+                    const startDay = startOfMonth.getDay();
+                    
+                    for (let i = startDay - 1; i >= 0; i--) {
+                      const d = new Date(viewDate.getFullYear(), viewDate.getMonth(), -i);
+                      days.push({ date: d, isCurrentMonth: false });
+                    }
+                    
+                    for (let i = 1; i <= endOfMonth.getDate(); i++) {
+                      const d = new Date(viewDate.getFullYear(), viewDate.getMonth(), i);
+                      days.push({ date: d, isCurrentMonth: true });
+                    }
+                    
+                    const remaining = 42 - days.length;
+                    for (let i = 1; i <= remaining; i++) {
+                      const d = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, i);
+                      days.push({ date: d, isCurrentMonth: false });
+                    }
+                    
+                    return days.map((dayObj, idx) => {
+                      const dateStr = dayObj.date.toISOString().split('T')[0];
+                      const dayTasks = currentTasks.filter(t => t.dueDate === dateStr);
+                      const isToday = new Date().toDateString() === dayObj.date.toDateString();
+                      
+                      return (
+                        <div key={idx} className={`${styles.calendarDay} ${!dayObj.isCurrentMonth ? styles.otherMonth : ''} ${isToday ? styles.todayDay : ''}`}>
+                          <div className={styles.dayLabel}>{dayObj.date.getDate()}</div>
+                          <div className={styles.dayTasks}>
+                            {dayTasks.map(task => {
+                              const { color: statusColor } = getStatusStyles(task.status);
+                              return (
+                                <div 
+                                  key={task.id} 
+                                  className={styles.calendarTask}
+                                  style={{ borderLeftColor: statusColor }}
+                                  onContextMenu={(e) => handleContextMenu(e, 'task', task.id)}
+                                >
+                                  {task.title}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+      </div>
+
+      {/* Creation/Rename/Delete/Move/Color Modal */}
+      {modalConfig.isOpen && (
+        <div className={styles.modalOverlay} onClick={closeModal}>
+          <div className={styles.modalContent} style={modalConfig.type === 'Task' ? { maxWidth: '650px', borderRadius: '16px' } : {}} onClick={e => e.stopPropagation()}>
+            <form onSubmit={handleModalSubmit}>
+              <div className={styles.modalHeader} style={modalConfig.type === 'Task' ? { borderBottom: 'none', paddingBottom: '0' } : {}}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    {modalConfig.type === 'Task' ? `${getItemName('list', modalConfig.targetId || '')} • NEW TASK` : ''}
+                  </span>
+                  <div style={{ fontSize: '18px', fontWeight: 700 }}>
+                    {modalConfig.type === 'Rename' ? `Rename ${modalConfig.targetType}` : 
+                     modalConfig.type === 'Delete' ? `Delete ${modalConfig.targetType}` :
+                     modalConfig.type === 'Move' ? `Move ${modalConfig.targetType}` :
+                     modalConfig.type === 'Color' ? `Choose ${modalConfig.targetType} Color` :
+                     modalConfig.type === 'Task' ? 'Create New Task' :
+                     `Create a ${modalConfig.type}`}
+                  </div>
+                </div>
+                <button type="button" className={styles.closeBtn} onClick={closeModal}>×</button>
+              </div>
+              <div className={styles.modalBody}>
+                {modalConfig.type === 'Delete' ? (
+                  <div style={{ color: '#64748b', fontSize: '14px', lineHeight: '1.5' }}>
+                    Are you sure you want to delete this {modalConfig.targetType}? This action cannot be undone and will remove all nested items.
+                  </div>
+                ) : modalConfig.type === 'Color' ? (
+                  <div className={styles.colorPickerRow}>
+                    {FOLDER_COLORS.map(c => {
+                      const isSelected = modalConfig.targetType === 'space'
+                        ? spaces.find(s => s.id === modalConfig.targetId)?.color === c
+                        : modalConfig.targetType === 'folder' 
+                          ? folders.find(f => f.id === modalConfig.targetId)?.color === c
+                          : lists.find(l => l.id === modalConfig.targetId)?.color === c;
+                      return (
+                        <div 
+                          key={c} 
+                          className={`${styles.colorCircle} ${isSelected ? styles.colorCircleSelected : ''}`}
+                          style={{ background: c }}
+                          onClick={() => updateItemColor(modalConfig.targetId!, modalConfig.targetType as 'space' | 'folder' | 'list', c)}
+                        />
+                      );
+                    })}
+                  </div>
+                ) : modalConfig.type === 'Move' ? (
+                  <div>
+                    <label className={styles.inputLabel}>Select Destination</label>
+                    <select 
+                      className={styles.selectInput}
+                      value={modalConfig.moveTargetId}
+                      onChange={(e) => setModalConfig({ ...modalConfig, moveTargetId: e.target.value })}
+                      required
+                    >
+                      <option value="">-- Select a target --</option>
+                      {modalConfig.targetType === 'list' && (
+                        <optgroup label="Folders">
+                          {folders.map(f => {
+                            const space = spaces.find(s => s.id === f.spaceId);
+                            return <option key={f.id} value={f.id}>{f.name} ({space?.name || 'Unknown Space'})</option>;
+                          })}
+                        </optgroup>
+                      )}
+                      {modalConfig.targetType === 'folder' && (
+                        <optgroup label="Spaces">
+                          {spaces.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                        </optgroup>
+                      )}
+                    </select>
+                  </div>
+                ) : modalConfig.type === 'Task' ? (
+                  <div className={styles.creationModalBody}>
+                    <input 
+                      className={styles.taskTitleInput} 
+                      placeholder="Task Name"
+                      value={modalConfig.inputValue}
+                      onChange={e => setModalConfig({...modalConfig, inputValue: e.target.value})}
+                      autoFocus
+                      required
+                    />
+                    <textarea 
+                      className={styles.taskDescInput} 
+                      placeholder="Add description..."
+                      value={modalConfig.description}
+                      onChange={e => setModalConfig({...modalConfig, description: e.target.value})}
+                    />
+                    
+                    <div className={styles.modalActionRow}>
+                      <div className={styles.pillBtn}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                        <select 
+                          style={{border:'none', background:'transparent', fontSize:'inherit', outline:'none', cursor:'pointer'}}
+                          value={modalConfig.assignee}
+                          onChange={e => setModalConfig({...modalConfig, assignee: e.target.value})}
+                        >
+                          <option value="">Assignee</option>
+                          <option value="Me">Me</option>
+                          <option value="Onboarding Assistant">Assistant</option>
+                        </select>
+                      </div>
+
+                      <div className={styles.pillBtn}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                        <input 
+                          type="date" 
+                          style={{border:'none', background:'transparent', fontSize:'inherit', outline:'none', cursor:'pointer'}}
+                          value={modalConfig.dueDate}
+                          onChange={e => setModalConfig({...modalConfig, dueDate: e.target.value})}
+                        />
+                      </div>
+
+                      <div className={styles.pillBtn}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+                        <select 
+                          style={{border:'none', background:'transparent', fontSize:'inherit', outline:'none', cursor:'pointer'}}
+                          value={modalConfig.priority}
+                          onChange={e => setModalConfig({...modalConfig, priority: e.target.value as any})}
+                        >
+                          {PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <label className={styles.inputLabel}>Name</label>
+                    <input 
+                      type="text" 
+                      className={styles.textInput} 
+                      placeholder={`e.g. ${modalConfig.type === 'Space' ? 'Marketing, Engineering' : 'New ' + modalConfig.type}`}
+                      value={modalConfig.inputValue}
+                      onChange={(e) => setModalConfig({ ...modalConfig, inputValue: e.target.value })}
+                      autoFocus
+                    />
+                  </>
+                )}
+              </div>
+              <div className={styles.modalFooter}>
+                <div style={{ color: '#94a3b8', fontSize: '12px' }}>
+                  {modalConfig.type === 'Task' && 'Press Enter to create'}
+                </div>
+                <div className={styles.modalFooterRight}>
+                  <button type="button" className={styles.cancelBtn} onClick={closeModal}>Cancel</button>
+                  <button 
+                    type="submit" 
+                    className={styles.submitBtn} 
+                    style={modalConfig.type === 'Delete' ? { background: '#ef4444' } : {}}
+                  >
+                    {modalConfig.type === 'Rename' ? 'Save Changes' : 
+                     modalConfig.type === 'Delete' ? 'Delete Permanently' :
+                     modalConfig.type === 'Move' ? 'Move Item' :
+                     modalConfig.type === 'Color' ? 'Close' :
+                     modalConfig.type === 'Task' ? 'Create Task' :
+                     'Continue'}
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Context Menu Rendering */}
+      {contextMenu && (
+        <div 
+          className={styles.contextMenu} 
+          style={{ 
+            top: (typeof window !== 'undefined' && contextMenu.y + 400 > window.innerHeight) ? contextMenu.y - 400 : contextMenu.y, 
+            left: (typeof window !== 'undefined' && contextMenu.x + 240 > window.innerWidth) ? contextMenu.x - 240 : contextMenu.x 
+          }}
+        >
+          <div className={styles.contextMenuHeader}>
+            {contextMenu.type === 'statusGroup' ? `GROUP: ${contextMenu.id.toUpperCase()}` : contextMenu.type === 'task' ? 'TASK OPTIONS' : `${contextMenu.type.toUpperCase()} OPTIONS`}
+          </div>
+          
+          {contextMenu.type === 'statusGroup' ? (
+            <>
+              <div className={styles.contextMenuItem} onClick={() => { toggleStatusCollapse(contextMenu.id); closeContextMenu(); }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d={collapsedStatuses[contextMenu.id] ? "m15 18-6-6 6-6" : "M18 15l-6-6-6 6"}/></svg>
+                {collapsedStatuses[contextMenu.id] ? 'Expand group' : 'Collapse group'}
+              </div>
+              <div className={styles.contextMenuItem} onClick={() => { closeContextMenu(); }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg>
+                Archive all in this group
+              </div>
+              <div className={styles.contextMenuItem} onClick={() => { closeContextMenu(); }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                Automate status
+              </div>
+              <div className={styles.contextMenuDivider}></div>
+              <div className={styles.contextMenuItem} onClick={() => { closeContextMenu(); }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m9 11 3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                Select all
+              </div>
+              <div className={styles.contextMenuItem} onClick={() => { openModal('Rename', contextMenu.id, 'statusGroup'); closeContextMenu(); }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+                Rename
+              </div>
+              <div className={styles.contextMenuItem} onClick={() => { closeContextMenu(); }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
+                Edit statuses
+              </div>
+            </>
+          ) : contextMenu.type === 'task' ? (
+            <>
+              <div className={styles.contextMenuItem} onClick={() => { closeContextMenu(); }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                Favorite
+              </div>
+              <div className={styles.contextMenuItem} onClick={() => { openModal('Rename', contextMenu.id, 'task', tasks.find(t => t.id === contextMenu.id)?.title); closeContextMenu(); }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+                Rename
+              </div>
+              <div className={styles.contextMenuItem} onClick={() => { closeContextMenu(); }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+                Follow task
+              </div>
+              <div className={styles.contextMenuItem} onClick={() => { closeContextMenu(); }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                Remind me in Inbox
+              </div>
+              <div className={styles.contextMenuDivider}></div>
+              <div className={styles.contextMenuItem} onClick={() => { openModal('Move', contextMenu.id, 'task'); closeContextMenu(); }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m9 18 6-6-6-6"/></svg>
+                Move to
+              </div>
+              <div className={styles.contextMenuItem} onClick={() => { closeContextMenu(); }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                Duplicate
+              </div>
+              <div className={styles.contextMenuItem} onClick={() => { closeContextMenu(); }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg>
+                Archive
+              </div>
+              <div className={styles.contextMenuDivider}></div>
+              <div className={styles.contextMenuItem} style={{ color: '#ef4444' }} onClick={() => { performDelete('task', contextMenu.id); closeContextMenu(); }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                Delete
+              </div>
+            </>
+          ) : (
+            <>
+              <div className={styles.contextMenuItem} onClick={() => { openModal('Rename', contextMenu.id, contextMenu.type, getItemName(contextMenu.type, contextMenu.id)); closeContextMenu(); }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+                Rename
+              </div>
+              <div className={styles.contextMenuItem} onClick={() => { closeContextMenu(); performDuplicate(contextMenu.type as any, contextMenu.id); }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                Duplicate
+              </div>
+              <div className={styles.contextMenuItem} onClick={() => { openModal('Color', contextMenu.id, contextMenu.type); closeContextMenu(); }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m19 21-7-7"/><circle cx="7.5" cy="7.5" r="5.5"/><path d="m21 3-4.5 4.5"/></svg>
+                Change Color
+              </div>
+              <div className={styles.contextMenuItem} onClick={() => { openModal('Move', contextMenu.id, contextMenu.type); closeContextMenu(); }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m9 18 6-6-6-6"/></svg>
+                Move to
+              </div>
+              <div className={styles.contextMenuDivider}></div>
+              <div className={styles.contextMenuItem} style={{ color: '#ef4444' }} onClick={() => { openModal('Delete', contextMenu.id, contextMenu.type); closeContextMenu(); }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                Delete
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
