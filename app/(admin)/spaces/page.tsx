@@ -67,13 +67,30 @@ export default function SpacesPage() {
         const taskData = await tasksRes.json();
 
         setSpaces(hierarchy.spaces || []);
-        setFolders(hierarchy.folders || []);
-        setLists(hierarchy.lists || []);
-        setTasks(taskData.tasks || []);
+        
+        // Map snake_case to camelCase
+        const mappedFolders = (hierarchy.folders || []).map((f: any) => ({
+          ...f,
+          spaceId: f.space_id
+        }));
+        setFolders(mappedFolders);
+
+        const mappedLists = (hierarchy.lists || []).map((l: any) => ({
+          ...l,
+          parentId: l.parent_id
+        }));
+        setLists(mappedLists);
+
+        const mappedTasks = (taskData.tasks || []).map((t: any) => ({
+          ...t,
+          listId: t.list_id,
+          dueDate: t.due_date
+        }));
+        setTasks(mappedTasks);
         
         // Auto-select first list if nothing selected
-        if (!activeItem && hierarchy.lists?.length > 0) {
-          setActiveItem({ type: 'list', id: hierarchy.lists[0].id });
+        if (!activeItem && mappedLists.length > 0) {
+          setActiveItem({ type: 'list', id: mappedLists[0].id });
         }
       }
     } catch (error) {
@@ -171,7 +188,7 @@ export default function SpacesPage() {
         });
         if (res.ok) {
           const newItem = await res.json();
-          setFolders([...folders, newItem]);
+          setFolders([...folders, { ...newItem, spaceId: newItem.space_id }]);
         }
       } else if (type === 'List' && targetId) {
         const res = await fetch('/api/admin/spaces', {
@@ -180,7 +197,7 @@ export default function SpacesPage() {
         });
         if (res.ok) {
           const newItem = await res.json();
-          setLists([...lists, newItem]);
+          setLists([...lists, { ...newItem, parentId: newItem.parent_id }]);
         }
       } else if (type === 'Task' && targetId) {
         const res = await fetch('/api/admin/project-tasks', {
@@ -197,7 +214,7 @@ export default function SpacesPage() {
         });
         if (res.ok) {
           const newItem = await res.json();
-          setTasks([...tasks, newItem]);
+          setTasks([...tasks, { ...newItem, listId: newItem.list_id, dueDate: newItem.due_date }]);
         }
       } else if (type === 'Rename' && targetId && targetType) {
         const url = targetType === 'task' ? '/api/admin/project-tasks' : '/api/admin/spaces';
@@ -208,9 +225,9 @@ export default function SpacesPage() {
         if (res.ok) {
           const updated = await res.json();
           if (targetType === 'space') setSpaces(spaces.map(s => s.id === targetId ? updated : s));
-          else if (targetType === 'folder') setFolders(folders.map(f => f.id === targetId ? updated : f));
-          else if (targetType === 'list') setLists(lists.map(l => l.id === targetId ? updated : l));
-          else if (targetType === 'task') setTasks(tasks.map(t => t.id === targetId ? updated : t));
+          else if (targetType === 'folder') setFolders(folders.map(f => f.id === targetId ? { ...updated, spaceId: updated.space_id } : f));
+          else if (targetType === 'list') setLists(lists.map(l => l.id === targetId ? { ...updated, parentId: updated.parent_id } : l));
+          else if (targetType === 'task') setTasks(tasks.map(t => t.id === targetId ? { ...updated, listId: updated.list_id, dueDate: updated.due_date } : t));
         }
       }
       closeModal();
@@ -263,8 +280,8 @@ export default function SpacesPage() {
       if (res.ok) {
         const updated = await res.json();
         if (type === 'space') setSpaces(spaces.map(s => s.id === id ? updated : s));
-        else if (type === 'folder') setFolders(folders.map(f => f.id === id ? updated : f));
-        else if (type === 'list') setLists(lists.map(l => l.id === id ? updated : l));
+        else if (type === 'folder') setFolders(folders.map(f => f.id === id ? { ...updated, spaceId: updated.space_id } : f));
+        else if (type === 'list') setLists(lists.map(l => l.id === id ? { ...updated, parentId: updated.parent_id } : l));
       }
       closeModal();
     } catch (e) { console.error(e); }
