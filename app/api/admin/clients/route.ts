@@ -4,6 +4,7 @@ import { getAdminFromRequest } from '@/lib/auth';
 import { nanoid } from 'nanoid';
 
 export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export async function GET(req: NextRequest) {
   const admin = getAdminFromRequest(req);

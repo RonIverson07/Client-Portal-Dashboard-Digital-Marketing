@@ -1,4 +1,5 @@
 export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/lib/supabase';
 import { getAdminFromRequest } from '@/lib/auth';
@@ -38,7 +39,14 @@ export async function GET(req: NextRequest) {
     comments: undefined
   }));
 
-  return NextResponse.json({ tasks });
+  return NextResponse.json({ tasks }, {
+    headers: {
+      'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+      'Expires': '0',
+      'Pragma': 'no-cache',
+      'Surrogate-Control': 'no-store'
+    }
+  });
 }
 
 export async function POST(req: NextRequest) {

@@ -7,4 +7,10 @@ if (!supabaseUrl || !supabaseServiceRoleKey) {
   console.warn('Supabase URL or Service Role Key is missing. Admin operations may fail.');
 }
 
-export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey);
+// Disable Next.js Data Cache for all Supabase fetch calls
+const noStoreFetch: typeof globalThis.fetch = (input, init) =>
+  globalThis.fetch(input, { ...init, cache: 'no-store' });
+
+export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceRoleKey, {
+  global: { fetch: noStoreFetch },
+});
