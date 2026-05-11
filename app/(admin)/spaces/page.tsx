@@ -200,10 +200,29 @@ export default function SpacesPage() {
           setLists([...lists, { ...newItem, parentId: newItem.parent_id }]);
         }
       } else if (type === 'Task' && targetId) {
+        let actualListId = targetId;
+        const isList = lists.some(l => l.id === targetId);
+        
+        if (!isList) {
+          // Auto-create a list if adding to Folder/Space directly
+          const lRes = await fetch('/api/admin/spaces', {
+            method: 'POST',
+            body: JSON.stringify({ type: 'list', parent_id: targetId, name: 'General' })
+          });
+          if (lRes.ok) {
+            const newList = await lRes.json();
+            const mappedList = { ...newList, parentId: newList.parent_id };
+            setLists(prev => [...prev, mappedList]);
+            actualListId = newList.id;
+          } else {
+            return;
+          }
+        }
+
         const res = await fetch('/api/admin/project-tasks', {
           method: 'POST',
           body: JSON.stringify({ 
-            list_id: targetId, 
+            list_id: actualListId, 
             title: inputValue, 
             status: 'TO DO',
             description,
@@ -469,10 +488,29 @@ export default function SpacesPage() {
                 <button className={`${styles.tabBtn} ${activeView === 'board' ? styles.tabActive : ''}`} onClick={() => setActiveView('board')}>Board</button>
                 <button className={`${styles.tabBtn} ${activeView === 'calendar' ? styles.tabActive : ''}`} onClick={() => setActiveView('calendar')}>Calendar</button>
                 
-                {/* Add Task button for active List */}
-                {activeItem.type === 'list' && (
-                  <button className="btn btn-primary btn-sm" style={{ marginLeft: '24px', borderRadius: '6px', fontWeight: 600 }} onClick={() => addTask(activeItem.id)}>+ Add Task</button>
-                )}
+                {/* Add Task button */}
+                <button 
+                  className="btn btn-primary btn-sm" 
+                  style={{ marginLeft: '24px', borderRadius: '6px', fontWeight: 600 }} 
+                  onClick={() => {
+                    let targetId = activeItem.id;
+                    if (activeItem.type !== 'list') {
+                      // Try to find an existing list first
+                      const existingList = lists.find(l => l.parentId === activeItem.id);
+                      if (existingList) targetId = existingList.id;
+                      else if (activeItem.type === 'space') {
+                        const sf = folders.filter(f => f.spaceId === activeItem.id);
+                        for (const f of sf) {
+                          const fl = lists.find(l => l.parentId === f.id);
+                          if (fl) { targetId = fl.id; break; }
+                        }
+                      }
+                    }
+                    addTask(targetId);
+                  }}
+                >
+                  + Add Task
+                </button>
               </div>
             )}
           </div>
@@ -536,12 +574,28 @@ export default function SpacesPage() {
                         </div>
                       ))}
 
-                      {activeItem.type === 'list' && status === 'TO DO' && (
-                        <div className={styles.boardAddTask} onClick={() => addTask(activeItem.id)}>
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                          Add Task
-                        </div>
-                      )}
+                      {(() => {
+                        let targetListId = '';
+                        if (activeItem.type === 'list') targetListId = activeItem.id;
+                        else if (activeItem.type === 'folder') targetListId = lists.find(l => l.parentId === activeItem.id)?.id || '';
+                        else if (activeItem.type === 'space') {
+                          targetListId = lists.find(l => l.parentId === activeItem.id)?.id || '';
+                          if (!targetListId) {
+                            const sf = folders.filter(f => f.spaceId === activeItem.id);
+                            for (const f of sf) {
+                              const fl = lists.find(l => l.parentId === f.id);
+                              if (fl) { targetListId = fl.id; break; }
+                            }
+                          }
+                        }
+
+                        return targetListId && status === 'TO DO' ? (
+                          <div className={styles.boardAddTask} onClick={() => addTask(targetListId)}>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                            Add Task
+                          </div>
+                        ) : null;
+                      })()}
                     </div>
                   );
                 })}
@@ -599,12 +653,28 @@ export default function SpacesPage() {
                         </div>
                       ))}
 
-                      {activeItem.type === 'list' && status === 'TO DO' && (
-                        <div className={styles.addTaskRow} onClick={() => addTask(activeItem.id)}>
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                          Add Task
-                        </div>
-                      )}
+                      {(() => {
+                        let targetListId = '';
+                        if (activeItem.type === 'list') targetListId = activeItem.id;
+                        else if (activeItem.type === 'folder') targetListId = lists.find(l => l.parentId === activeItem.id)?.id || '';
+                        else if (activeItem.type === 'space') {
+                          targetListId = lists.find(l => l.parentId === activeItem.id)?.id || '';
+                          if (!targetListId) {
+                            const sf = folders.filter(f => f.spaceId === activeItem.id);
+                            for (const f of sf) {
+                              const fl = lists.find(l => l.parentId === f.id);
+                              if (fl) { targetListId = fl.id; break; }
+                            }
+                          }
+                        }
+
+                        return targetListId && status === 'TO DO' ? (
+                          <div className={styles.addTaskRow} onClick={() => addTask(targetListId)}>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                            Add Task
+                          </div>
+                        ) : null;
+                      })()}
                     </div>
                   );
                 })}
