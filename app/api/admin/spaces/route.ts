@@ -44,14 +44,24 @@ export async function POST(req: NextRequest) {
 
     if (type === 'duplicate') {
       const { id, itemType } = data;
+      
+      const cleanObj = (obj: any) => {
+        const newObj = { ...obj };
+        delete newObj.id;
+        delete newObj.created_at;
+        return newObj;
+      };
+
       if (itemType === 'list') {
         const { data: source, error: sErr } = await supabase.from('lists').select('*').eq('id', id).single();
         if (sErr) throw sErr;
-        const { data: newList, error: lErr } = await supabase.from('lists').insert([{ ...source, id: undefined, name: `${source.name} (Copy)`, created_at: undefined }]).select().single();
+        const { data: newList, error: lErr } = await supabase.from('lists').insert([
+          { ...cleanObj(source), name: `${source.name} (Copy)` }
+        ]).select().single();
         if (lErr) throw lErr;
         const { data: sourceTasks } = await supabase.from('project_tasks').select('*').eq('list_id', id);
         if (sourceTasks?.length) {
-          await supabase.from('project_tasks').insert(sourceTasks.map(t => ({ ...t, id: undefined, list_id: newList.id, created_at: undefined })));
+          await supabase.from('project_tasks').insert(sourceTasks.map(t => ({ ...cleanObj(t), list_id: newList.id })));
         }
         return NextResponse.json({ success: true });
       }
@@ -59,14 +69,18 @@ export async function POST(req: NextRequest) {
       if (itemType === 'folder') {
         const { data: source, error: sErr } = await supabase.from('folders').select('*').eq('id', id).single();
         if (sErr) throw sErr;
-        const { data: newFolder, error: fErr } = await supabase.from('folders').insert([{ ...source, id: undefined, name: `${source.name} (Copy)`, created_at: undefined }]).select().single();
+        const { data: newFolder, error: fErr } = await supabase.from('folders').insert([
+          { ...cleanObj(source), name: `${source.name} (Copy)` }
+        ]).select().single();
         if (fErr) throw fErr;
         const { data: sourceLists } = await supabase.from('lists').select('*').eq('parent_id', id);
         for (const list of (sourceLists || [])) {
-          const { data: newList } = await supabase.from('lists').insert([{ ...list, id: undefined, parent_id: newFolder.id, created_at: undefined }]).select().single();
+          const { data: newList } = await supabase.from('lists').insert([
+            { ...cleanObj(list), parent_id: newFolder.id }
+          ]).select().single();
           const { data: sourceTasks } = await supabase.from('project_tasks').select('*').eq('list_id', list.id);
           if (sourceTasks?.length) {
-            await supabase.from('project_tasks').insert(sourceTasks.map(t => ({ ...t, id: undefined, list_id: newList.id, created_at: undefined })));
+            await supabase.from('project_tasks').insert(sourceTasks.map(t => ({ ...cleanObj(t), list_id: newList.id })));
           }
         }
         return NextResponse.json({ success: true });
@@ -75,19 +89,25 @@ export async function POST(req: NextRequest) {
       if (itemType === 'space') {
         const { data: source, error: sErr } = await supabase.from('spaces').select('*').eq('id', id).single();
         if (sErr) throw sErr;
-        const { data: newSpace, error: spErr } = await supabase.from('spaces').insert([{ ...source, id: undefined, name: `${source.name} (Copy)`, created_at: undefined }]).select().single();
+        const { data: newSpace, error: spErr } = await supabase.from('spaces').insert([
+          { ...cleanObj(source), name: `${source.name} (Copy)` }
+        ]).select().single();
         if (spErr) throw spErr;
         
         // Clone folders
         const { data: sourceFolders } = await supabase.from('folders').select('*').eq('space_id', id);
         for (const folder of (sourceFolders || [])) {
-          const { data: newFolder } = await supabase.from('folders').insert([{ ...folder, id: undefined, space_id: newSpace.id, created_at: undefined }]).select().single();
+          const { data: newFolder } = await supabase.from('folders').insert([
+            { ...cleanObj(folder), space_id: newSpace.id }
+          ]).select().single();
           const { data: sourceLists } = await supabase.from('lists').select('*').eq('parent_id', folder.id);
           for (const list of (sourceLists || [])) {
-            const { data: newList } = await supabase.from('lists').insert([{ ...list, id: undefined, parent_id: newFolder.id, created_at: undefined }]).select().single();
+            const { data: newList } = await supabase.from('lists').insert([
+              { ...cleanObj(list), parent_id: newFolder.id }
+            ]).select().single();
             const { data: sourceTasks } = await supabase.from('project_tasks').select('*').eq('list_id', list.id);
             if (sourceTasks?.length) {
-              await supabase.from('project_tasks').insert(sourceTasks.map(t => ({ ...t, id: undefined, list_id: newList.id, created_at: undefined })));
+              await supabase.from('project_tasks').insert(sourceTasks.map(t => ({ ...cleanObj(t), list_id: newList.id })));
             }
           }
         }
@@ -95,10 +115,12 @@ export async function POST(req: NextRequest) {
         // Clone independent lists
         const { data: independentLists } = await supabase.from('lists').select('*').eq('parent_id', id);
         for (const list of (independentLists || [])) {
-          const { data: newList } = await supabase.from('lists').insert([{ ...list, id: undefined, parent_id: newSpace.id, created_at: undefined }]).select().single();
+          const { data: newList } = await supabase.from('lists').insert([
+            { ...cleanObj(list), parent_id: newSpace.id }
+          ]).select().single();
           const { data: sourceTasks } = await supabase.from('project_tasks').select('*').eq('list_id', list.id);
           if (sourceTasks?.length) {
-            await supabase.from('project_tasks').insert(sourceTasks.map(t => ({ ...t, id: undefined, list_id: newList.id, created_at: undefined })));
+            await supabase.from('project_tasks').insert(sourceTasks.map(t => ({ ...cleanObj(t), list_id: newList.id })));
           }
         }
         return NextResponse.json({ success: true });
