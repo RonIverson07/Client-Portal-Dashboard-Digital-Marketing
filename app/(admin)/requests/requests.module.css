@@ -28,6 +28,11 @@
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+.searchBar:hover {
+  background: white;
+  border-color: #cbd5e1;
+}
+
 .searchBar:focus-within {
   background: white;
   border-color: var(--color-primary);
@@ -48,6 +53,12 @@
   outline: none;
   font-size: 14px;
   color: #0f172a;
+}
+
+.searchBar input:focus {
+  outline: none !important;
+  box-shadow: none !important;
+  border: none !important;
 }
 
 .content {
@@ -209,6 +220,7 @@
   line-height: 1.4;
   display: -webkit-box;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
