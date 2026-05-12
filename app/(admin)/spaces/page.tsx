@@ -604,6 +604,7 @@ export default function SpacesPage() {
             
             {activeItem && (
               <div className={styles.viewTabs} style={{ marginTop: 'auto', marginBottom: '-1px' }}>
+                <div className={styles.tabsScrollArea}>
                 {pinnedViews.map(view => {
                   const isPinned = pinnedViewIds.includes(view);
                   
@@ -651,9 +652,12 @@ export default function SpacesPage() {
                     </button>
                   );
                 })}
+                </div>
 
-                <div className={styles.addViewContainer}>
-                  <button className={styles.addViewBtn} onClick={(e) => { e.stopPropagation(); setIsAddViewDropdownOpen(!isAddViewDropdownOpen); }}>
+                {activeView !== 'gantt' && activeView !== 'board' && (
+                  <div className={styles.headerActions}>
+                    <div className={styles.addViewContainer}>
+                    <button className={styles.addViewBtn} onClick={(e) => { e.stopPropagation(); setIsAddViewDropdownOpen(!isAddViewDropdownOpen); }}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '4px' }}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                     View
                   </button>
@@ -752,6 +756,8 @@ export default function SpacesPage() {
                 >
                   + Add Task
                 </button>
+                </div>
+                )}
               </div>
             )}
           </div>
