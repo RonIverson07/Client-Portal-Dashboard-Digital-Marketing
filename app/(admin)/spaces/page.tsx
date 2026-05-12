@@ -65,6 +65,7 @@ export default function SpacesPage() {
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [manualDate, setManualDate] = useState<{ day: number, time: string }>({ day: 12, time: '08:00' });
+  const [workloadRange, setWorkloadRange] = useState(14);
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
@@ -700,7 +701,7 @@ export default function SpacesPage() {
                 )}
               </div>
             </div>
-            
+
             {activeItem && (
               <div className={styles.viewTabs} style={{ marginTop: 'auto', marginBottom: '-1px' }}>
                 <div className={styles.tabsScrollArea}>
@@ -1567,9 +1568,13 @@ export default function SpacesPage() {
                 <div className={styles.workloadHeader}>
                   <div style={{ fontSize: '18px', fontWeight: 700, color: '#0f172a' }}>Workload</div>
                   <div style={{ display: 'flex', gap: '8px' }}>
-                    <select style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '12px', fontWeight: 500, color: '#475569', outline: 'none' }}>
-                      <option>14 days</option>
-                      <option>1 Month</option>
+                    <select 
+                      value={workloadRange}
+                      onChange={(e) => setWorkloadRange(parseInt(e.target.value))}
+                      style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '12px', fontWeight: 500, color: '#475569', outline: 'none' }}
+                    >
+                      <option value={14}>14 days</option>
+                      <option value={30}>1 Month</option>
                     </select>
                   </div>
                 </div>
@@ -1578,7 +1583,7 @@ export default function SpacesPage() {
                   <div className={styles.workloadGridHeader}>
                     <div className={styles.workloadAssigneeCol}>Assignee</div>
                     <div className={styles.workloadDatesScroll}>
-                      {[...Array(14)].map((_, i) => {
+                      {[...Array(workloadRange)].map((_, i) => {
                         const d = new Date();
                         d.setDate(d.getDate() + i);
                         const isToday = i === 0;
@@ -1615,7 +1620,7 @@ export default function SpacesPage() {
                             </div>
                           </div>
                           <div className={styles.workloadDatesScroll}>
-                            {[...Array(14)].map((_, i) => {
+                            {[...Array(workloadRange)].map((_, i) => {
                               const d = new Date();
                               d.setDate(d.getDate() + i);
                               const dateString = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -1933,7 +1938,7 @@ export default function SpacesPage() {
                         </div>
                       </div>
                       <div className={styles.calendarGridMini}>
-                        {['S','M','T','W','T','F','S'].map(d => (
+                        {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(d => (
                           <div key={d} style={{ fontSize: '9px', fontWeight: 700, textAlign: 'center', color: '#94a3b8', paddingBottom: '4px' }}>{d}</div>
                         ))}
                         {Array.from({ length: 31 }, (_, i) => i + 1).map(day => (

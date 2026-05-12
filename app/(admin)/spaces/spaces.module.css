@@ -569,7 +569,7 @@
   margin-bottom: 16px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
 .statusCount {
@@ -1711,6 +1711,7 @@
   font-weight: 800;
   border: 2px solid white;
 }
+
 .contextSubMenu {
   position: absolute;
   background: white;
@@ -2034,7 +2035,13 @@
 }
 
 @keyframes slideUp {
-  from { transform: translate(-50%, 20px); opacity: 0; }
-  to { transform: translate(-50%, 0); opacity: 1; }
-}
+  from {
+    transform: translate(-50%, 20px);
+    opacity: 0;
+  }
 
+  to {
+    transform: translate(-50%, 0);
+    opacity: 1;
+  }
+}
