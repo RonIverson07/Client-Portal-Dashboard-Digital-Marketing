@@ -45,8 +45,8 @@ export default function SpacesPage() {
   
   // Selection state
   const [activeItem, setActiveItem] = useState<{type: 'space'|'folder'|'list', id: string} | null>(null);
-  const [activeView, setActiveView] = useState<'board' | 'list' | 'calendar' | 'gantt' | 'table'>('list');
-  const [pinnedViews, setPinnedViews] = useState<string[]>(['list', 'board', 'calendar', 'gantt', 'table']);
+  const [activeView, setActiveView] = useState<'board' | 'list' | 'calendar' | 'gantt' | 'table' | 'dashboard'>('list');
+  const [pinnedViews, setPinnedViews] = useState<string[]>(['list', 'board', 'calendar', 'gantt', 'table', 'dashboard']);
   const [pinnedViewIds, setPinnedViewIds] = useState<string[]>([]);
   const [draggedView, setDraggedView] = useState<string | null>(null);
   const [isAddViewDropdownOpen, setIsAddViewDropdownOpen] = useState(false);
@@ -698,6 +698,15 @@ export default function SpacesPage() {
                               <div className={styles.addViewSub}>Structured table format</div>
                             </div>
                           </div>
+                          <div className={styles.addViewItem} onClick={() => { setActiveView('dashboard'); setPinnedViews(prev => prev.includes('dashboard') ? prev : [...prev, 'dashboard']); setIsAddViewDropdownOpen(false); }}>
+                            <div className={styles.addViewIcon} style={{ background: '#f5f3ff', color: '#8b5cf6' }}>
+                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><path d="M3 9h18"/><path d="M9 21V9"/><path d="M15 21V9"/></svg>
+                            </div>
+                            <div className={styles.addViewText}>
+                              <div className={styles.addViewTitle}>Dashboard</div>
+                              <div className={styles.addViewSub}>Visual overview & reporting</div>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -1212,6 +1221,141 @@ export default function SpacesPage() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            )}
+
+            {activeItem && activeView === 'dashboard' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                {/* Stats Row */}
+                <div className={styles.statsRow}>
+                  <div className={styles.statCard} style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                    <div className={styles.statValue} style={{ color: '#64748b' }}>{currentTasks.filter(t => !t.assignee).length}</div>
+                    <div className={styles.statLabel}>Unassigned</div>
+                  </div>
+                  <div className={styles.statCard} style={{ background: '#eff6ff', border: '1px solid #dbeafe' }}>
+                    <div className={styles.statValue} style={{ color: '#2563eb' }}>{currentTasks.filter(t => t.status === 'IN PROGRESS').length}</div>
+                    <div className={styles.statLabel}>In Progress</div>
+                  </div>
+                  <div className={styles.statCard} style={{ background: '#ecfdf5', border: '1px solid #d1fae5' }}>
+                    <div className={styles.statValue} style={{ color: '#10b981' }}>{currentTasks.filter(t => t.status === 'COMPLETE').length}</div>
+                    <div className={styles.statLabel}>Completed</div>
+                  </div>
+                </div>
+
+                {/* Main Dashboard Grid */}
+                <div className={styles.dashboardGrid}>
+                  {/* Workload by Status */}
+                  <div className={styles.dashboardCard}>
+                    <div className={styles.cardTitle}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 20v-6M6 20V10M18 20V4"/></svg>
+                      Workload by Status
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '12px' }}>Distribution of tasks across your workflow</div>
+                    <div className={styles.workloadBar}>
+                      {statuses.map((status, i) => {
+                        const count = currentTasks.filter(t => t.status === status).length;
+                        const percentage = currentTasks.length > 0 ? (count / currentTasks.length) * 100 : 0;
+                        if (percentage === 0) return null;
+                        return (
+                          <div 
+                            key={status} 
+                            className={styles.workloadSegment} 
+                            style={{ width: `${percentage}%`, background: getStatusStyles(status).color }}
+                            title={`${status}: ${count} tasks`}
+                          ></div>
+                        );
+                      })}
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', marginTop: '16px' }}>
+                      {statuses.slice(0, 4).map(status => (
+                        <div key={status} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: 600, color: '#475569' }}>
+                          <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: getStatusStyles(status).color }}></div>
+                          {status}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Assignee Workload */}
+                  <div className={styles.dashboardCard}>
+                    <div className={styles.cardTitle}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                      Open Tasks by Assignee
+                    </div>
+                    <div className={styles.chartPlaceholder}>
+                      {(() => {
+                        const assigneeMap: Record<string, number> = {};
+                        currentTasks.filter(t => t.status !== 'COMPLETE').forEach(t => {
+                          const name = t.assignee || 'Unassigned';
+                          assigneeMap[name] = (assigneeMap[name] || 0) + 1;
+                        });
+                        const entries = Object.entries(assigneeMap).slice(0, 5);
+                        const max = Math.max(...entries.map(e => e[1]), 1);
+                        
+                        return entries.map(([name, count]) => (
+                          <div key={name} className={styles.chartBar} style={{ height: `${(count / max) * 100}%`, background: name === 'Unassigned' ? '#cbd5e1' : '#3b82f6' }}>
+                            <div className={styles.chartBarValue}>{count}</div>
+                            <div className={styles.chartBarLabel}>{name}</div>
+                          </div>
+                        ));
+                      })()}
+                    </div>
+                  </div>
+
+                  {/* Overdue Tasks */}
+                  <div className={styles.dashboardCard}>
+                    <div className={styles.cardTitle}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: '#ef4444' }}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                      Tasks Due or Overdue
+                    </div>
+                    <div className={styles.dashboardList}>
+                      {currentTasks
+                        .filter(t => t.dueDate && t.status !== 'COMPLETE' && new Date(t.dueDate) < new Date())
+                        .slice(0, 5)
+                        .map(task => (
+                          <div key={task.id} className={styles.dashboardListItem}>
+                            <div className={styles.activityDot} style={{ background: '#ef4444' }}></div>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontSize: '13px', fontWeight: 600, color: '#1e293b' }}>{task.title}</div>
+                              <div style={{ fontSize: '11px', color: '#ef4444' }}>Overdue: {task.dueDate}</div>
+                            </div>
+                            <div className={styles.priorityBadge} style={{ transform: 'scale(0.8)', padding: '2px 6px' }}>{task.priority || 'Normal'}</div>
+                          </div>
+                        ))
+                      }
+                      {currentTasks.filter(t => t.dueDate && t.status !== 'COMPLETE' && new Date(t.dueDate) < new Date()).length === 0 && (
+                        <div style={{ padding: '20px', textAlign: 'center', color: '#94a3b8', fontSize: '13px' }}>
+                          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" style={{ marginBottom: '12px', opacity: 0.5 }}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                          <div>No overdue tasks!</div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Latest Activity */}
+                  <div className={styles.dashboardCard}>
+                    <div className={styles.cardTitle}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 1 1-7.6-11.7 8.38 8.38 0 0 1 3.8.9L21 3z"/></svg>
+                      Latest Activity
+                    </div>
+                    <div className={styles.dashboardList}>
+                      {currentTasks.slice(0, 5).map((task, i) => (
+                        <div key={task.id} className={styles.dashboardListItem}>
+                          <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: 700, color: '#64748b' }}>
+                            {task.assignee ? task.assignee[0] : 'U'}
+                          </div>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: '12px', color: '#475569' }}>
+                              <span style={{ fontWeight: 700, color: '#0f172a' }}>{task.assignee || 'Someone'}</span> updated task 
+                              <span style={{ fontWeight: 600, color: '#3b82f6' }}> {task.title}</span>
+                            </div>
+                            <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '2px' }}>{i + 1}h ago</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
           </div>
