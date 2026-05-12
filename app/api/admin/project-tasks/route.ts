@@ -20,6 +20,15 @@ export async function POST(req: NextRequest) {
     const data = await req.json();
     const { data: task, error } = await supabase.from('project_tasks').insert([data]).select().single();
     if (error) throw error;
+
+    // Log creation
+    await supabase.from('activity_log').insert([{
+      task_id: task.id,
+      action_type: 'creation',
+      new_value: task.status,
+      user_type: 'admin'
+    }]);
+
     return NextResponse.json(task);
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -31,9 +40,42 @@ export async function PATCH(req: NextRequest) {
   if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
-    const { id, type, ...updates } = await req.json();
+    const { id, ...updates } = await req.json();
+
+    // 1. Fetch current state for logging
+    const { data: currentTask } = await supabase.from('project_tasks').select('id, status, is_archived').eq('id', id).single();
+
+    // 2. Perform update
     const { data, error } = await supabase.from('project_tasks').update(updates).eq('id', id).select().single();
     if (error) throw error;
+
+    // 3. Log changes if applicable
+    if (currentTask) {
+      const logs = [];
+      if (updates.status && currentTask.status !== updates.status) {
+        logs.push({
+          task_id: id,
+          action_type: 'status_change',
+          previous_value: currentTask.status,
+          new_value: updates.status,
+          user_type: 'admin'
+        });
+      }
+      if (updates.is_archived !== undefined && currentTask.is_archived !== updates.is_archived) {
+        logs.push({
+          task_id: id,
+          action_type: updates.is_archived ? 'archive' : 'unarchive',
+          previous_value: currentTask.is_archived ? 'archived' : 'active',
+          new_value: updates.is_archived ? 'archived' : 'active',
+          user_type: 'admin'
+        });
+      }
+
+      if (logs.length > 0) {
+        await supabase.from('activity_log').insert(logs);
+      }
+    }
+
     return NextResponse.json(data);
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

@@ -21,6 +21,16 @@ interface SpaceTask {
   is_archived?: boolean;
 }
 
+interface ActivityLog {
+  id: string;
+  task_id: string;
+  action_type: string;
+  previous_value?: string;
+  new_value?: string;
+  user_type: string;
+  created_at: string;
+}
+
 const FOLDER_COLORS = ['#f59e0b', '#3b82f6', '#10b981', '#ef4444', '#8b5cf6', '#ec4899', '#6366f1'];
 const PRIORITIES = ['Urgent', 'High', 'Normal', 'Low', 'Clear'];
 
@@ -68,6 +78,7 @@ export default function SpacesPage() {
   const [manualDate, setManualDate] = useState<{ day: number, time: string }>({ day: 12, time: '08:00' });
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
   const [workloadRange, setWorkloadRange] = useState(14);
+  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
@@ -154,17 +165,20 @@ export default function SpacesPage() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [hierarchyRes, tasksRes] = await Promise.all([
+      const [hierarchyRes, tasksRes, logsRes] = await Promise.all([
         fetch('/api/admin/spaces'),
-        fetch('/api/admin/project-tasks')
+        fetch('/api/admin/project-tasks'),
+        fetch('/api/admin/activity-logs')
       ]);
 
       if (hierarchyRes.ok && tasksRes.ok) {
         const hierarchy = await hierarchyRes.json();
         const taskData = await tasksRes.json();
+        const logsData = logsRes.ok ? await logsRes.json() : { logs: [] };
 
         setSpaces(hierarchy.spaces || []);
-
+        setActivityLogs(logsData.logs || []);
+        
         // Map snake_case to camelCase
         const mappedFolders = (hierarchy.folders || []).map((f: any) => ({
           ...f,
@@ -191,6 +205,16 @@ export default function SpacesPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchLogs = async () => {
+    try {
+      const res = await fetch('/api/admin/activity-logs');
+      if (res.ok) {
+        const data = await res.json();
+        setActivityLogs(data.logs || []);
+      }
+    } catch (e) { console.error('Failed to fetch logs', e); }
   };
 
   const generateId = () => Math.random().toString(36).substr(2, 9);
@@ -271,14 +295,31 @@ export default function SpacesPage() {
 
       if (type === 'Move' && targetId && targetType && moveTargetId) {
         const url = targetType === 'task' ? '/api/admin/project-tasks' : '/api/admin/spaces';
+        const body: any = { id: targetId };
+        
+        if (targetType === 'task') {
+          const statuses = ['TO DO', 'PLANNING', 'IN PROGRESS', 'AT RISK', 'UPDATE REQUIRED', 'COMPLETE'];
+          if (statuses.includes(moveTargetId)) {
+            body.status = moveTargetId;
+          } else {
+            body.list_id = moveTargetId;
+          }
+        } else {
+          body.type = targetType;
+          body.parent_id = moveTargetId;
+        }
+
         const res = await fetch(url, {
           method: 'PATCH',
-          body: JSON.stringify({ type: targetType, id: targetId, parent_id: moveTargetId, list_id: moveTargetId })
+          body: JSON.stringify(body)
         });
         if (res.ok) {
           const updated = await res.json();
           if (targetType === 'list') setLists(lists.map(l => l.id === targetId ? updated : l));
-          else if (targetType === 'task') setTasks(tasks.map(t => t.id === targetId ? mapTask(updated) : t));
+          else if (targetType === 'task') {
+            setTasks(tasks.map(t => t.id === targetId ? mapTask(updated) : t));
+            fetchLogs();
+          }
           closeModal();
         }
         return;
@@ -434,6 +475,7 @@ export default function SpacesPage() {
       if (res.ok) {
         const newItem = await res.json();
         setTasks(prev => [...prev, { ...newItem, listId: newItem.list_id, dueDate: newItem.due_date, startDate: newItem.start_date }]);
+        fetchLogs();
       }
     } catch (e) { console.error(e); }
   };
@@ -449,6 +491,7 @@ export default function SpacesPage() {
         if (type === 'space') setSpaces(spaces.map(s => s.id === id ? updated : s));
         else if (type === 'folder') setFolders(folders.map(f => f.id === id ? { ...updated, spaceId: updated.space_id } : f));
         else if (type === 'list') setLists(lists.map(l => l.id === id ? { ...updated, parentId: updated.parent_id } : l));
+        fetchLogs();
       }
       closeModal();
     } catch (e) { console.error(e); }
@@ -486,6 +529,7 @@ export default function SpacesPage() {
     }
 
     setDraggedTaskId(null);
+    fetchLogs();
   };
 
   // Expand/Collapse State
@@ -579,6 +623,7 @@ export default function SpacesPage() {
         setTasks(prev => prev.map(t => idsToArchive.includes(t.id) ? { ...t, is_archived: true } : t));
         showToast(idsToArchive.length > 1 ? `${idsToArchive.length} tasks archived` : 'Task archived');
         clearSelection();
+        fetchLogs();
       }
     } catch (e) {
       console.error(e);
@@ -1639,53 +1684,94 @@ export default function SpacesPage() {
 
             {activeItem && activeView === 'activity' && (
               <div className={styles.activityContainer}>
-                <div style={{ fontSize: '18px', fontWeight: 700, color: '#0f172a', marginBottom: '24px' }}>Activity</div>
-                <div style={{ fontSize: '13px', fontWeight: 600, color: '#64748b', marginBottom: '16px', paddingBottom: '8px', borderBottom: '1px solid #e2e8f0' }}>Today</div>
+                <div style={{ fontSize: '20px', fontWeight: 700, color: '#0f172a', marginBottom: '24px' }}>Activity</div>
 
-                <div className={styles.activityList}>
-                  {currentTasks.slice(0, 10).map((task, i) => (
-                    <div key={task.id} className={styles.activityCard}>
-                      <div className={styles.activityCardHeader}>
-                        <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#64748b' }}></div>
-                        <span style={{ fontWeight: 600, color: '#1e293b' }}>{task.title}</span>
+                {(() => {
+                  const filteredLogs = activityLogs.filter(log => currentTasks.some(t => t.id === log.task_id));
+
+                  if (filteredLogs.length === 0) {
+                    return (
+                      <div className={styles.emptyInbox}>
+                        <div className={styles.emptyInboxIcon}>📋</div>
+                        <h3>No activity in this {activeItem.type} yet</h3>
+                        <p>Actions like moving tasks or changing statuses within this {activeItem.type} will appear here.</p>
                       </div>
-                      <div className={styles.activityCardBody}>
-                        <div className={styles.activityRow}>
-                          <div className={styles.activityAvatar}>{task.assignee ? task.assignee[0] : 'U'}</div>
-                          <div className={styles.activityText}>
-                            <span style={{ fontWeight: 600 }}>{task.assignee || 'You'}</span> created this task
-                          </div>
-                          <div className={styles.activityTime}>{i + 1}h ago</div>
-                        </div>
-                        {task.priority && (
-                          <div className={styles.activityRow}>
-                            <div className={styles.activityAvatar}>{task.assignee ? task.assignee[0] : 'U'}</div>
-                            <div className={styles.activityText}>
-                              <span style={{ fontWeight: 600 }}>{task.assignee || 'You'}</span> set priority to <strong>{task.priority}</strong>
-                            </div>
-                            <div className={styles.activityTime}>{i + 1}h ago</div>
-                          </div>
-                        )}
-                        {task.dueDate && (
-                          <div className={styles.activityRow}>
-                            <div className={styles.activityAvatar}>{task.assignee ? task.assignee[0] : 'U'}</div>
-                            <div className={styles.activityText}>
-                              <span style={{ fontWeight: 600 }}>{task.assignee || 'You'}</span> set the due date to {task.dueDate}
-                            </div>
-                            <div className={styles.activityTime}>{i + 1}h ago</div>
-                          </div>
-                        )}
-                        <div className={styles.activityRow}>
-                          <div className={styles.activityAvatar}>{task.assignee ? task.assignee[0] : 'U'}</div>
-                          <div className={styles.activityText}>
-                            <span style={{ fontWeight: 600 }}>{task.assignee || 'You'}</span> changed status to <span style={{ color: getStatusStyles(task.status).color, background: getStatusStyles(task.status).bg, padding: '2px 6px', borderRadius: '4px', fontSize: '11px', fontWeight: 700 }}>{task.status}</span>
-                          </div>
-                          <div className={styles.activityTime}>{i + 2}h ago</div>
-                        </div>
+                    );
+                  }
+
+                  // 1. Group by Date (Today, Yesterday, Older)
+                  const dateGroups: Record<string, Record<string, ActivityLog[]>> = {};
+
+                  const getGroupKey = (dateStr: string) => {
+                    const d = new Date(dateStr);
+                    const today = new Date();
+                    const yesterday = new Date();
+                    yesterday.setDate(today.getDate() - 1);
+
+                    if (d.toDateString() === today.toDateString()) return 'Today';
+                    if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
+                    return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+                  };
+
+                  filteredLogs.forEach(log => {
+                    const groupKey = getGroupKey(log.created_at);
+                    if (!dateGroups[groupKey]) dateGroups[groupKey] = {};
+                    if (!dateGroups[groupKey][log.task_id]) dateGroups[groupKey][log.task_id] = [];
+                    dateGroups[groupKey][log.task_id].push(log);
+                  });
+
+                  const timeAgo = (date: string) => {
+                    return new Date(date).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+                  };
+
+                  return Object.entries(dateGroups).map(([dateLabel, taskGroups]) => (
+                    <div key={dateLabel} style={{ marginBottom: '32px' }}>
+                      <div style={{ fontSize: '13px', fontWeight: 600, color: '#64748b', marginBottom: '16px', paddingBottom: '8px', borderBottom: '1px solid #f1f5f9' }}>
+                        {dateLabel}
                       </div>
+
+                      {Object.entries(taskGroups).map(([taskId, logs]) => {
+                        const task = tasks.find(t => t.id === taskId);
+                        const taskTitle = task ? task.title : 'Deleted Task';
+                        const listName = task ? (lists.find(l => l.id === task.listId)?.name || 'General') : 'N/A';
+
+                        return (
+                          <div key={taskId} className={styles.activityCard} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden', marginBottom: '16px' }}>
+                            <div style={{ padding: '12px 16px', borderBottom: '1px solid #e2e8f0', background: 'white' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: task ? '#94a3b8' : '#ef4444' }}></div>
+                                <span style={{ fontWeight: 700, color: '#0f172a', fontSize: '15px' }}>{taskTitle}</span>
+                              </div>
+                              <div style={{ fontSize: '11px', color: '#64748b', marginLeft: '16px', marginTop: '2px' }}>{listName}</div>
+                            </div>
+                            
+                            <div style={{ padding: '8px 0' }}>
+                              {logs.map(log => (
+                                <div key={log.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 16px', transition: 'background 0.2s ease' }} className={styles.activityLogRow}>
+                                  <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: 700, color: '#475569' }}>
+                                    {log.user_type === 'admin' ? 'Me' : 'U'}
+                                  </div>
+                                  <div style={{ flex: 1, fontSize: '13px', color: '#334155' }}>
+                                    <span style={{ fontWeight: 600, color: '#0f172a' }}>{log.user_type === 'admin' ? 'You' : 'User'}</span>
+                                    {log.action_type === 'creation' && <> created this task</>}
+                                    {log.action_type === 'status_change' && (
+                                      <> changed status from <strong style={{ color: '#64748b' }}>{log.previous_value}</strong> to <span style={{ color: getStatusStyles(log.new_value!).color, background: getStatusStyles(log.new_value!).bg, padding: '2px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: 700, marginLeft: '4px' }}>{log.new_value}</span></>
+                                    )}
+                                    {log.action_type === 'archive' && <> archived this task</>}
+                                    {log.action_type === 'unarchive' && <> restored this task</>}
+                                  </div>
+                                  <div style={{ fontSize: '11px', color: '#94a3b8' }}>
+                                    {dateLabel === 'Today' || dateLabel === 'Yesterday' ? `${dateLabel} at ${timeAgo(log.created_at)}` : timeAgo(log.created_at)}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
-                  ))}
-                </div>
+                  ));
+                })()}
               </div>
             )}
 
@@ -1924,6 +2010,20 @@ export default function SpacesPage() {
                         <optgroup label="Spaces">
                           {spaces.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                         </optgroup>
+                      )}
+                      {modalConfig.targetType === 'task' && (
+                        <>
+                          <optgroup label="Change Status">
+                            {['TO DO', 'PLANNING', 'IN PROGRESS', 'AT RISK', 'UPDATE REQUIRED', 'COMPLETE'].map(s => (
+                              <option key={s} value={s}>{s}</option>
+                            ))}
+                          </optgroup>
+                          <optgroup label="Move to List">
+                            {lists.map(l => (
+                              <option key={l.id} value={l.id}>{l.name}</option>
+                            ))}
+                          </optgroup>
+                        </>
                       )}
                     </select>
                   </div>
