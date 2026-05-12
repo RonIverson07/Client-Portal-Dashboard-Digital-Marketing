@@ -18,6 +18,7 @@ interface SpaceTask {
   priority?: 'Urgent' | 'High' | 'Normal' | 'Low' | 'Clear';
   description?: string;
   reminder_at?: string;
+  is_archived?: boolean;
 }
 
 const FOLDER_COLORS = ['#f59e0b', '#3b82f6', '#10b981', '#ef4444', '#8b5cf6', '#ec4899', '#6366f1'];
@@ -46,7 +47,7 @@ export default function SpacesPage() {
 
   // Selection state
   const [activeItem, setActiveItem] = useState<{ type: 'space' | 'folder' | 'list', id: string } | null>(null);
-  const [activeView, setActiveView] = useState<'board' | 'list' | 'calendar' | 'gantt' | 'table' | 'dashboard' | 'activity' | 'workload' | 'inbox'>('list');
+  const [activeView, setActiveView] = useState<'board' | 'list' | 'calendar' | 'gantt' | 'table' | 'dashboard' | 'activity' | 'workload' | 'inbox' | 'archived'>('list');
   const [pinnedViews, setPinnedViews] = useState<string[]>(['list', 'board', 'calendar', 'gantt', 'table', 'dashboard', 'activity', 'workload', 'inbox']);
   const [pinnedViewIds, setPinnedViewIds] = useState<string[]>([]);
   const [draggedView, setDraggedView] = useState<string | null>(null);
@@ -65,6 +66,7 @@ export default function SpacesPage() {
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [manualDate, setManualDate] = useState<{ day: number, time: string }>({ day: 12, time: '08:00' });
+  const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
   const [workloadRange, setWorkloadRange] = useState(14);
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
@@ -145,7 +147,8 @@ export default function SpacesPage() {
     ...t,
     listId: t.list_id || t.listId,
     dueDate: t.due_date || t.dueDate,
-    startDate: t.start_date || t.startDate
+    startDate: t.start_date || t.startDate,
+    is_archived: t.is_archived || false
   });
 
   const fetchData = async () => {
@@ -497,19 +500,39 @@ export default function SpacesPage() {
 
   const setTaskReminder = async (taskId: string, date: Date | null) => {
     const reminderAt = date ? date.toISOString() : null;
-    const res = await fetch('/api/admin/project-tasks', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: taskId, reminder_at: reminderAt })
-    });
-    if (res.ok) {
-      const updated = await res.json();
-      setTasks(tasks.map(t => t.id === taskId ? mapTask(updated) : t));
-      showToast('Reminder set successfully!');
+    
+    // Support bulk updates if the target task is part of a selection
+    const idsToUpdate = (selectedTaskIds.has(taskId) && selectedTaskIds.size > 1) 
+      ? Array.from(selectedTaskIds) 
+      : [taskId];
+
+    console.log(`Setting reminder for tasks:`, idsToUpdate, `Date:`, reminderAt);
+
+    const results = await Promise.all(idsToUpdate.map(id => 
+      fetch('/api/admin/project-tasks', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, reminder_at: reminderAt })
+      })
+    ));
+
+    const allOk = results.every(res => res.ok);
+    
+    if (allOk) {
+      // Update local state for all updated tasks
+      setTasks(prev => prev.map(t => idsToUpdate.includes(t.id) ? { ...t, reminder_at: reminderAt || undefined } : t));
+      
+      const msg = idsToUpdate.length > 1 
+        ? `Reminders set for ${idsToUpdate.length} tasks!` 
+        : 'Reminder set successfully!';
+      
+      console.log(`Bulk update success: ${msg}`);
+      showToast(msg);
+      
+      if (idsToUpdate.length > 1) clearSelection();
     } else {
-      const err = await res.json();
-      console.error('Failed to set reminder:', err);
-      showToast('Error: Could not save reminder.', 'error');
+      console.error('Failed to set some reminders', results);
+      showToast('Error: Could not save one or more reminders.', 'error');
     }
   };
 
@@ -528,24 +551,88 @@ export default function SpacesPage() {
     setActiveSubMenu(null);
   };
 
+  const archiveTasks = async (targetId: string, isGroup: boolean = false) => {
+    let idsToArchive: string[] = [];
+    
+    if (isGroup) {
+      // Archive all tasks in the status group (targetId is the status name)
+      idsToArchive = currentTasks.filter(t => t.status === targetId && !t.is_archived).map(t => t.id);
+    } else {
+      // Archive single task or current selection
+      idsToArchive = (selectedTaskIds.has(targetId) && selectedTaskIds.size > 1)
+        ? Array.from(selectedTaskIds)
+        : [targetId];
+    }
+
+    if (idsToArchive.length === 0) return;
+
+    try {
+      const results = await Promise.all(idsToArchive.map(id =>
+        fetch('/api/admin/project-tasks', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, is_archived: true })
+        })
+      ));
+
+      if (results.every(r => r.ok)) {
+        setTasks(prev => prev.map(t => idsToArchive.includes(t.id) ? { ...t, is_archived: true } : t));
+        showToast(idsToArchive.length > 1 ? `${idsToArchive.length} tasks archived` : 'Task archived');
+        clearSelection();
+      }
+    } catch (e) {
+      console.error(e);
+      showToast('Failed to archive tasks', 'error');
+    }
+  };
+
+  const unarchiveTask = async (taskId: string) => {
+    try {
+      const res = await fetch('/api/admin/project-tasks', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: taskId, is_archived: false })
+      });
+
+      if (res.ok) {
+        setTasks(prev => prev.map(t => t.id === taskId ? { ...t, is_archived: false } : t));
+        showToast('Task restored');
+      }
+    } catch (e) {
+      console.error(e);
+      showToast('Failed to restore task', 'error');
+    }
+  };
+
   const [collapsedStatuses, setCollapsedStatuses] = useState<Record<string, boolean>>({});
   const toggleStatusCollapse = (status: string) => {
-    setCollapsedStatuses(prev => ({ ...prev, [status]: !prev[status] }));
+    setCollapsedStatuses((prev: Record<string, boolean>) => ({ ...prev, [status]: !prev[status] }));
   };
+
+  const selectAllInGroup = (status: string) => {
+    const groupTaskIds = currentTasks.filter(t => t.status === status).map(t => t.id);
+    setSelectedTaskIds(prev => {
+      const next = new Set(prev);
+      groupTaskIds.forEach(id => next.add(id));
+      return next;
+    });
+  };
+
+  const clearSelection = () => setSelectedTaskIds(new Set());
 
   // Get current tasks to display
   let currentTasks: SpaceTask[] = [];
 
   if (activeItem) {
     if (activeItem.type === 'list') {
-      currentTasks = tasks.filter(t => t.listId === activeItem.id);
+      currentTasks = tasks.filter(t => t.listId === activeItem.id && (activeView === 'archived' ? t.is_archived : !t.is_archived));
     } else if (activeItem.type === 'folder') {
       const folderLists = lists.filter(l => l.parentId === activeItem.id).map(l => l.id);
-      currentTasks = tasks.filter(t => folderLists.includes(t.listId));
+      currentTasks = tasks.filter(t => folderLists.includes(t.listId) && (activeView === 'archived' ? t.is_archived : !t.is_archived));
     } else if (activeItem.type === 'space') {
       const spaceFolders = folders.filter(f => f.spaceId === activeItem.id).map(f => f.id);
       const spaceLists = lists.filter(l => l.parentId === activeItem.id || spaceFolders.includes(l.parentId)).map(l => l.id);
-      currentTasks = tasks.filter(t => spaceLists.includes(t.listId));
+      currentTasks = tasks.filter(t => spaceLists.includes(t.listId) && (activeView === 'archived' ? t.is_archived : !t.is_archived));
     }
   }
 
@@ -716,7 +803,8 @@ export default function SpacesPage() {
                             view === 'activity' ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '6px' }}><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg> :
                               view === 'workload' ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '6px' }}><rect x="4" y="4" width="16" height="16" rx="2" ry="2" /><path d="M4 10h16" /><path d="M10 4v16" /></svg> :
                                 view === 'inbox' ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '6px' }}><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" /><polyline points="22,6 12,13 2,6" /></svg> :
-                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '6px' }}><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><line x1="3" y1="9" x2="21" y2="9" /><line x1="3" y1="15" x2="21" y2="15" /><line x1="9" y1="3" x2="9" y2="21" /><line x1="15" y1="3" x2="15" y2="21" /></svg>;
+                                  view === 'archived' ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '6px' }}><rect width="20" height="5" x="2" y="3" rx="1" /><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" /><path d="M10 12h4" /></svg> :
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '6px' }}><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><line x1="3" y1="9" x2="21" y2="9" /><line x1="3" y1="15" x2="21" y2="15" /><line x1="9" y1="3" x2="9" y2="21" /><line x1="15" y1="3" x2="15" y2="21" /></svg>;
 
                     const label = view.charAt(0).toUpperCase() + view.slice(1);
 
@@ -856,11 +944,30 @@ export default function SpacesPage() {
                                   <div className={styles.addViewSub}>Manage team capacity</div>
                                 </div>
                               </div>
+                              <div className={styles.addViewItem} onClick={() => { setActiveView('archived'); setPinnedViews(prev => prev.includes('archived') ? prev : [...prev, 'archived']); setIsAddViewDropdownOpen(false); }}>
+                                <div className={styles.addViewIcon} style={{ background: '#f1f5f9', color: '#64748b' }}>
+                                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect width="20" height="5" x="2" y="3" rx="1" /><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" /><path d="M10 12h4" /></svg>
+                                </div>
+                                <div className={styles.addViewText}>
+                                  <div className={styles.addViewTitle}>Archived</div>
+                                  <div className={styles.addViewSub}>View & restore hidden tasks</div>
+                                </div>
+                              </div>
                             </div>
                           </div>
                         </div>
                       )}
                     </div>
+
+                    {selectedTaskIds.size > 0 && (
+                      <button
+                        className={styles.pillBtn}
+                        style={{ marginLeft: '12px', color: '#ef4444', borderColor: '#fecaca', background: '#fef2f2' }}
+                        onClick={clearSelection}
+                      >
+                        Clear Selection ({selectedTaskIds.size})
+                      </button>
+                    )}
 
                     {/* Add Task button */}
                     <button
@@ -921,10 +1028,18 @@ export default function SpacesPage() {
                       {colTasks.map(task => (
                         <div
                           key={task.id}
-                          className={styles.taskCard}
+                          className={`${styles.taskCard} ${selectedTaskIds.has(task.id) ? styles.taskCardSelected : ''}`}
                           draggable
                           onDragStart={(e) => handleDragStart(e, task.id)}
                           onContextMenu={(e) => handleContextMenu(e, 'task', task.id)}
+                          onClick={() => {
+                            setSelectedTaskIds(prev => {
+                              const next = new Set(prev);
+                              if (next.has(task.id)) next.delete(task.id);
+                              else next.add(task.id);
+                              return next;
+                            });
+                          }}
                         >
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                             <div style={{ fontSize: '14px', fontWeight: 500, color: '#1e293b' }}>{task.title}</div>
@@ -944,8 +1059,11 @@ export default function SpacesPage() {
                               </div>
                             )}
 
-                            <div className={styles.cardFooterIcon} title="Priority">
-                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={task.priority === 'Urgent' ? '#ef4444' : task.priority === 'High' ? '#f59e0b' : '#3b82f6'} strokeWidth="2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" /><line x1="4" y1="22" x2="4" y2="15" /></svg>
+                            <div className={styles.cardFooterIcon} title="Priority" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill={task.priority === 'Urgent' ? '#ef4444' : 'none'} stroke={task.priority === 'Urgent' ? '#ef4444' : task.priority === 'High' ? '#f59e0b' : '#3b82f6'} strokeWidth="2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" /><line x1="4" y1="22" x2="4" y2="15" /></svg>
+                              <span style={{ fontSize: '10px', fontWeight: 700, color: task.priority === 'Urgent' ? '#ef4444' : task.priority === 'High' ? '#f59e0b' : '#3b82f6', textTransform: 'uppercase' }}>
+                                {task.priority}
+                              </span>
                             </div>
                           </div>
                         </div>
@@ -1001,9 +1119,16 @@ export default function SpacesPage() {
                       </div>
 
                       {colTasks.map(task => (
-                        <div key={task.id} className={styles.listRow}>
+                        <div key={task.id} className={`${styles.listRow} ${selectedTaskIds.has(task.id) ? styles.listRowSelected : ''}`} onClick={() => {
+                          setSelectedTaskIds(prev => {
+                            const next = new Set(prev);
+                            if (next.has(task.id)) next.delete(task.id);
+                            else next.add(task.id);
+                            return next;
+                          });
+                        }}>
                           <div className={styles.taskNameCell} onClick={(e) => { e.stopPropagation(); openModal('Rename', task.id, 'task', task.title, task); }}>
-                            <div className={styles.statusIconCircle} style={{ borderColor: statusColor }} onClick={(e) => { e.stopPropagation(); handleContextMenu(e, 'statusGroup', task.id); }}>
+                            <div className={styles.statusIconCircle} style={{ borderColor: statusColor }} onClick={(e) => { e.stopPropagation(); handleContextMenu(e, 'statusGroup', status); }}>
                               {status === 'COMPLETE' && <svg width="8" height="8" viewBox="0 0 24 24" fill={statusColor}><path d="M20.285 2l-11.285 11.567-5.286-5.011-3.714 3.716 9 8.728 15-15.285z" /></svg>}
                             </div>
                             <span style={{ color: status === 'COMPLETE' ? '#94a3b8' : 'inherit', textDecoration: status === 'COMPLETE' ? 'line-through' : 'none' }}>
@@ -1686,6 +1811,48 @@ export default function SpacesPage() {
                 </div>
               </div>
             )}
+
+            {activeView === 'archived' && (
+              <div className={styles.dataArea} style={{ background: 'white' }}>
+                <div style={{ padding: '0 24px 24px' }}>
+                  <h2 style={{ fontSize: '20px', fontWeight: 700, color: '#0f172a', marginBottom: '8px' }}>Archived Tasks</h2>
+                  <p style={{ color: '#64748b', fontSize: '14px', marginBottom: '24px' }}>Tasks in this list are hidden from your active workspace. You can restore them at any time.</p>
+
+                  <div className={styles.inboxList}>
+                    {currentTasks.length === 0 ? (
+                      <div className={styles.emptyInbox}>
+                        <div className={styles.emptyInboxIcon}>📁</div>
+                        <h3>No archived tasks</h3>
+                        <p>Archive tasks to keep your views clean and organized.</p>
+                      </div>
+                    ) : (
+                      currentTasks.map(task => (
+                        <div key={task.id} className={styles.inboxItem}>
+                          <div className={styles.inboxItemStatus} style={{ background: getStatusStyles(task.status).bg }}></div>
+                          <div className={styles.inboxItemContent}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase' }}>{task.status}</span>
+                                <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 700 }}>📦 ARCHIVED</span>
+                              </div>
+                            </div>
+                            <div style={{ fontSize: '15px', fontWeight: 600, color: '#1e293b', marginBottom: '4px' }}>{task.title}</div>
+                          </div>
+                          <div className={styles.archivedItemActions}>
+                            <button 
+                              className={styles.restoreBtn} 
+                              onClick={() => unarchiveTask(task.id)}
+                            >
+                              Restore Task
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -1884,16 +2051,12 @@ export default function SpacesPage() {
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d={collapsedStatuses[contextMenu.id] ? "m15 18-6-6 6-6" : "M18 15l-6-6-6 6"} /></svg>
                 {collapsedStatuses[contextMenu.id] ? 'Expand group' : 'Collapse group'}
               </div>
-              <div className={styles.contextMenuItem} onClick={() => { closeContextMenu(); }}>
+              <div className={styles.contextMenuItem} onClick={() => { archiveTasks(contextMenu.id, true); closeContextMenu(); }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect width="20" height="5" x="2" y="3" rx="1" /><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" /><path d="M10 12h4" /></svg>
                 Archive all in this group
               </div>
-              <div className={styles.contextMenuItem} onClick={() => { closeContextMenu(); }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z" /></svg>
-                Automate status
-              </div>
               <div className={styles.contextMenuDivider}></div>
-              <div className={styles.contextMenuItem} onClick={() => { closeContextMenu(); }}>
+              <div className={styles.contextMenuItem} onClick={() => { selectAllInGroup(contextMenu.id); closeContextMenu(); }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m9 11 3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>
                 Select all
               </div>
@@ -2041,7 +2204,7 @@ export default function SpacesPage() {
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect width="14" height="14" x="8" y="8" rx="2" ry="2" /><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" /></svg>
                 Duplicate
               </div>
-              <div className={styles.contextMenuItem} onMouseEnter={() => setActiveSubMenu(null)} onClick={() => { closeContextMenu(); }}>
+              <div className={styles.contextMenuItem} onMouseEnter={() => setActiveSubMenu(null)} onClick={() => { archiveTasks(contextMenu.id); closeContextMenu(); }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect width="20" height="5" x="2" y="3" rx="1" /><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" /><path d="M10 12h4" /></svg>
                 Archive
               </div>

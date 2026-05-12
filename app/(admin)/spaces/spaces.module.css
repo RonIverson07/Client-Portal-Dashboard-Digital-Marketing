@@ -605,6 +605,16 @@
   background: #f8fafc;
 }
 
+.taskCardSelected {
+  border-color: #3b82f6 !important;
+  background-color: #eff6ff !important;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2) !important;
+}
+
+.listRowSelected {
+  background-color: #eff6ff !important;
+}
+
 .taskNameCell {
   display: flex;
   align-items: center;
@@ -1861,7 +1871,7 @@
   display: flex;
   gap: 8px;
   align-items: center;
-  opacity: 0;
+  opacity: 1;
   transition: opacity 0.2s ease;
 }
 
@@ -1887,6 +1897,38 @@
   background: #f1f5f9;
   color: #2563eb;
   border-color: #2563eb;
+}
+
+.archivedItemActions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  opacity: 1;
+}
+
+.restoreBtn {
+  padding: 8px 16px;
+  border-radius: 8px;
+  background: #2563eb;
+  color: white;
+  border: none;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2);
+  white-space: nowrap;
+}
+
+.restoreBtn:hover {
+  background: #1d4ed8 !important;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 6px rgba(37, 99, 235, 0.3);
+  color: white !important;
+}
+
+.restoreBtn:active {
+  transform: translateY(0);
 }
 
 .emptyInbox {
