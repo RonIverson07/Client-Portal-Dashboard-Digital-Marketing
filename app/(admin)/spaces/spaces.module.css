@@ -514,17 +514,18 @@
 }
 
 .statusGroupHeader {
-  padding: 4px 12px;
+  padding: 6px 14px;
   display: flex;
   align-items: center;
   gap: 8px;
-  font-weight: 700;
-  font-size: 11px;
+  font-weight: 800;
+  font-size: 13px;
   width: fit-content;
-  border-radius: 4px;
-  margin-bottom: 12px;
+  border-radius: 6px;
+  margin-bottom: 16px;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.08em;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
 }
 
 .statusCount {
@@ -536,22 +537,24 @@
 .listViewHeader {
   display: grid;
   grid-template-columns: 1fr 120px 140px 120px 40px;
-  padding: 8px 12px;
+  padding: 12px 12px;
   font-size: 12px;
-  color: #94a3b8;
-  font-weight: 500;
-  border-bottom: 1px solid #f1f5f9;
+  color: #64748b;
+  font-weight: 700;
+  border-bottom: 1px solid #e2e8f0;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 
 .listRow {
   display: grid;
   grid-template-columns: 1fr 120px 140px 120px 40px;
-  padding: 10px 12px;
+  padding: 14px 12px;
   font-size: 14px;
-  color: #1e293b;
-  border-bottom: 1px solid #f8fafc;
+  color: #0f172a;
+  border-bottom: 1px solid #f1f5f9;
   align-items: center;
-  transition: background 0.2s;
+  transition: all 0.2s ease;
 }
 
 .listRow:hover {
@@ -562,6 +565,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
+  font-weight: 600;
 }
 
 .statusIconCircle {
@@ -589,8 +593,11 @@
 }
 
 .cellIcon {
-  color: #94a3b8;
-  opacity: 0.6;
+  color: #64748b;
+  opacity: 0.8;
+  display: flex;
+  align-items: center;
+  font-weight: 500;
 }
 
 /* Creation Modal Enhancements */
@@ -1155,4 +1162,156 @@
   white-space: nowrap;
   overflow: hidden;
   z-index: 5;
+}
+
+/* Table View */
+.tableViewContainer {
+  background: white;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  overflow: auto;
+  flex: 1;
+}
+
+.taskTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.taskTable th {
+  text-align: left;
+  padding: 12px 16px;
+  background: #f8fafc;
+  color: #64748b;
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid #e2e8f0;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
+.taskTable td {
+  padding: 10px 16px;
+  border-bottom: 1px solid #f1f5f9;
+  color: #1e293b;
+  vertical-align: middle;
+}
+
+.taskTable tr:hover td {
+  background: #f8fafc;
+}
+
+.statusBadge {
+  padding: 2px 8px;
+  border-radius: 99px;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* Add View Dropdown */
+.addViewContainer {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.addViewBtn {
+  background: transparent;
+  border: none;
+  padding: 6px 12px;
+  font-size: 13px;
+  color: #64748b;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  font-weight: 500;
+  border-radius: 4px;
+}
+
+.addViewBtn:hover {
+  background: #f1f5f9;
+  color: #1e293b;
+}
+
+.addViewDropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  width: 580px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e2e8f0;
+  z-index: 100;
+  padding: 20px;
+  margin-top: 8px;
+}
+
+.addViewSection {
+  margin-bottom: 24px;
+}
+
+.addViewSection:last-child {
+  margin-bottom: 0;
+}
+
+.addViewSectionHeader {
+  font-size: 11px;
+  font-weight: 600;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 12px;
+}
+
+.addViewGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.addViewItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.addViewItem:hover {
+  background: #f8fafc;
+}
+
+.addViewIcon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.addViewText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.addViewTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.addViewSub {
+  font-size: 11px;
+  color: #64748b;
 }

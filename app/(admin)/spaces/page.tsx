@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import styles from './spaces.module.css';
 
 // Interfaces for our local structural state
@@ -45,12 +45,42 @@ export default function SpacesPage() {
   
   // Selection state
   const [activeItem, setActiveItem] = useState<{type: 'space'|'folder'|'list', id: string} | null>(null);
-  const [activeView, setActiveView] = useState<'board' | 'list' | 'calendar' | 'gantt'>('list');
+  const [activeView, setActiveView] = useState<'board' | 'list' | 'calendar' | 'gantt' | 'table'>('list');
+  const [pinnedViews, setPinnedViews] = useState<string[]>(['list', 'board', 'calendar', 'gantt', 'table']);
+  const [pinnedViewIds, setPinnedViewIds] = useState<string[]>([]);
+  const [draggedView, setDraggedView] = useState<string | null>(null);
+  const [isAddViewDropdownOpen, setIsAddViewDropdownOpen] = useState(false);
+  const [viewContextMenu, setViewContextMenu] = useState<{ x: number, y: number, view: string } | null>(null);
   const [viewDate, setViewDate] = useState(new Date());
   const [calendarView, setCalendarView] = useState<'month' | 'week' | 'day'>('month');
   const [isViewDropdownOpen, setIsViewDropdownOpen] = useState(false);
 
   const [loading, setLoading] = useState(true);
+  const [isHydrated, setIsHydrated] = useState(false);
+
+  // Unified View Persistence
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedSettings = localStorage.getItem('spaces_view_config');
+      if (savedSettings) {
+        try {
+          const config = JSON.parse(savedSettings);
+          if (config.pinnedViews) setPinnedViews(config.pinnedViews);
+          if (config.pinnedViewIds) setPinnedViewIds(config.pinnedViewIds);
+        } catch (e) {
+          console.error('Failed to load view config', e);
+        }
+      }
+      setIsHydrated(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isHydrated && typeof window !== 'undefined') {
+      const config = { pinnedViews, pinnedViewIds };
+      localStorage.setItem('spaces_view_config', JSON.stringify(config));
+    }
+  }, [pinnedViews, pinnedViewIds, isHydrated]);
 
   // Load from database on mount
   useEffect(() => {
@@ -392,7 +422,7 @@ export default function SpacesPage() {
   };
 
   return (
-    <div className={styles.container} onClick={() => { closeContextMenu(); setIsViewDropdownOpen(false); }}>
+    <main className={styles.main} onClick={() => { setIsViewDropdownOpen(false); setIsAddViewDropdownOpen(false); setViewContextMenu(null); }}>
       <div className={styles.content}>
         
         {/* Hierarchical Sidebar */}
@@ -490,10 +520,121 @@ export default function SpacesPage() {
             
             {activeItem && (
               <div className={styles.viewTabs} style={{ marginTop: 'auto', marginBottom: '-1px' }}>
-                <button className={`${styles.tabBtn} ${activeView === 'list' ? styles.tabActive : ''}`} onClick={() => setActiveView('list')}>List</button>
-                <button className={`${styles.tabBtn} ${activeView === 'board' ? styles.tabActive : ''}`} onClick={() => setActiveView('board')}>Board</button>
-                <button className={`${styles.tabBtn} ${activeView === 'calendar' ? styles.tabActive : ''}`} onClick={() => setActiveView('calendar')}>Calendar</button>
-                <button className={`${styles.tabBtn} ${activeView === 'gantt' ? styles.tabActive : ''}`} onClick={() => setActiveView('gantt')}>Gantt</button>
+                {pinnedViews.map(view => {
+                  const isPinned = pinnedViewIds.includes(view);
+                  
+                  const icon = view === 'list' ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '6px' }}><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg> :
+                               view === 'board' ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '6px' }}><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg> :
+                               view === 'calendar' ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '6px' }}><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> :
+                               view === 'gantt' ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '6px' }}><path d="M3 7h18M3 12h10M3 17h14"/></svg> :
+                               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '6px' }}><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>;
+                  
+                  const label = view.charAt(0).toUpperCase() + view.slice(1);
+
+                  return (
+                    <button 
+                      key={view}
+                      draggable
+                      className={`${styles.tabBtn} ${activeView === view ? styles.tabActive : ''}`} 
+                      onClick={() => setActiveView(view as any)}
+                      onContextMenu={(e) => { e.preventDefault(); setViewContextMenu({ x: e.clientX, y: e.clientY, view }); }}
+                      onDragStart={(e) => { setDraggedView(view); e.dataTransfer.setData('view', view); }}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        const sourceView = e.dataTransfer.getData('view') || draggedView;
+                        if (!sourceView || sourceView === view) return;
+                        
+                        const newPinned = [...pinnedViews];
+                        const sourceIdx = newPinned.indexOf(sourceView);
+                        const targetIdx = newPinned.indexOf(view);
+                        
+                        newPinned.splice(sourceIdx, 1);
+                        newPinned.splice(targetIdx, 0, sourceView);
+                        
+                        setPinnedViews(newPinned);
+                        setDraggedView(null);
+                      }}
+                      style={{ position: 'relative', cursor: 'grab' }}
+                    >
+                      {icon}
+                      {label}
+                      {isPinned && (
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="#f59e0b" style={{ marginLeft: '4px', marginTop: '-6px' }}>
+                          <path d="M12 2L15 8L22 9L17 14L18 21L12 17L6 21L7 14L2 9L9 8L12 2Z"/>
+                        </svg>
+                      )}
+                    </button>
+                  );
+                })}
+
+                <div className={styles.addViewContainer}>
+                  <button className={styles.addViewBtn} onClick={(e) => { e.stopPropagation(); setIsAddViewDropdownOpen(!isAddViewDropdownOpen); }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '4px' }}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    View
+                  </button>
+                  
+                  {isAddViewDropdownOpen && (
+                    <div className={styles.addViewDropdown} onClick={e => e.stopPropagation()}>
+                      <div className={styles.addViewSection}>
+                        <div className={styles.addViewSectionHeader}>Popular</div>
+                        <div className={styles.addViewGrid}>
+                          <div className={styles.addViewItem} onClick={() => { setActiveView('list'); setPinnedViews(prev => prev.includes('list') ? prev : [...prev, 'list']); setIsAddViewDropdownOpen(false); }}>
+                            <div className={styles.addViewIcon} style={{ background: '#f1f5f9', color: '#64748b' }}>
+                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                            </div>
+                            <div className={styles.addViewText}>
+                              <div className={styles.addViewTitle}>List</div>
+                              <div className={styles.addViewSub}>Track tasks, bugs, people & more</div>
+                            </div>
+                          </div>
+                          <div className={styles.addViewItem} onClick={() => { setActiveView('calendar'); setPinnedViews(prev => prev.includes('calendar') ? prev : [...prev, 'calendar']); setIsAddViewDropdownOpen(false); }}>
+                            <div className={styles.addViewIcon} style={{ background: '#fff7ed', color: '#f97316' }}>
+                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                            </div>
+                            <div className={styles.addViewText}>
+                              <div className={styles.addViewTitle}>Calendar</div>
+                              <div className={styles.addViewSub}>Plan, schedule, & delegate</div>
+                            </div>
+                          </div>
+                          <div className={styles.addViewItem} onClick={() => { setActiveView('board'); setPinnedViews(prev => prev.includes('board') ? prev : [...prev, 'board']); setIsAddViewDropdownOpen(false); }}>
+                            <div className={styles.addViewIcon} style={{ background: '#eff6ff', color: '#2563eb' }}>
+                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>
+                            </div>
+                            <div className={styles.addViewText}>
+                              <div className={styles.addViewTitle}>Board - Kanban</div>
+                              <div className={styles.addViewSub}>Move tasks between columns</div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className={styles.addViewSection}>
+                        <div className={styles.addViewSectionHeader}>More views</div>
+                        <div className={styles.addViewGrid}>
+                          <div className={styles.addViewItem} onClick={() => { setActiveView('gantt'); setPinnedViews(prev => prev.includes('gantt') ? prev : [...prev, 'gantt']); setIsAddViewDropdownOpen(false); }}>
+                            <div className={styles.addViewIcon} style={{ background: '#fef2f2', color: '#ef4444' }}>
+                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 7h18M3 12h10M3 17h14"/></svg>
+                            </div>
+                            <div className={styles.addViewText}>
+                              <div className={styles.addViewTitle}>Gantt</div>
+                              <div className={styles.addViewSub}>Plan dependencies & time</div>
+                            </div>
+                          </div>
+                          <div className={styles.addViewItem} onClick={() => { setActiveView('table'); setPinnedViews(prev => prev.includes('table') ? prev : [...prev, 'table']); setIsAddViewDropdownOpen(false); }}>
+                            <div className={styles.addViewIcon} style={{ background: '#ecfdf5', color: '#10b981' }}>
+                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>
+                            </div>
+                            <div className={styles.addViewText}>
+                              <div className={styles.addViewTitle}>Table</div>
+                              <div className={styles.addViewSub}>Structured table format</div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
                 
                 {/* Add Task button */}
                 <button 
@@ -946,6 +1087,60 @@ export default function SpacesPage() {
                 </div>
               </div>
             )}
+
+            {activeItem && activeView === 'table' && (
+              <div className={styles.tableViewContainer}>
+                <table className={styles.taskTable}>
+                  <thead>
+                    <tr>
+                      <th style={{ width: '40px' }}>#</th>
+                      <th>Name</th>
+                      <th>Assignee</th>
+                      <th>Status</th>
+                      <th>Due Date</th>
+                      <th>Priority</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {currentTasks.map((task, index) => (
+                      <tr key={task.id}>
+                        <td style={{ color: '#94a3b8', fontSize: '11px' }}>{index + 1}</td>
+                        <td>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <div className={styles.statusIconCircle} style={{ borderColor: getStatusStyles(task.status).color, width: '12px', height: '12px' }}></div>
+                            {task.title}
+                          </div>
+                        </td>
+                        <td>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: 600 }}>{task.assignee ? task.assignee[0] : '?'}</div>
+                            <span style={{ fontSize: '12px' }}>{task.assignee || 'Unassigned'}</span>
+                          </div>
+                        </td>
+                        <td>
+                          <span className={styles.statusBadge} style={{ 
+                            background: getStatusStyles(task.status).color + '20', 
+                            color: getStatusStyles(task.status).color,
+                            border: `1px solid ${getStatusStyles(task.status).color}40`
+                          }}>
+                            {task.status.toUpperCase()}
+                          </span>
+                        </td>
+                        <td style={{ fontSize: '12px', color: '#64748b' }}>
+                          {task.dueDate || '-'}
+                        </td>
+                        <td>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: task.priority === 'Urgent' ? '#ef4444' : task.priority === 'High' ? '#f59e0b' : '#64748b' }}>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15" stroke="currentColor" strokeWidth="2"/></svg>
+                            {task.priority}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
 
@@ -1229,6 +1424,60 @@ export default function SpacesPage() {
           )}
         </div>
       )}
-    </div>
+      {/* View Context Menu */}
+      {viewContextMenu && (
+        <div 
+          className={styles.contextMenu} 
+          style={{ top: viewContextMenu.y, left: viewContextMenu.x }}
+          onClick={e => e.stopPropagation()}
+        >
+          <div className={styles.contextMenuHeader}>VIEW OPTIONS</div>
+          <div className={styles.contextMenuItem} onClick={() => {
+            const isPinned = pinnedViewIds.includes(viewContextMenu.view);
+            let newPinnedViewIds: string[];
+            let newPinnedViews = [...pinnedViews];
+
+            if (isPinned) {
+              // Unpin: remove from star list and sort back to default relative to other unpinned
+              newPinnedViewIds = pinnedViewIds.filter(id => id !== viewContextMenu.view);
+              const defaultOrder = ['list', 'board', 'calendar', 'gantt', 'table'];
+              
+              // To unpin while maintaining order: sort the whole list, but keep existing pinned ones at the front
+              newPinnedViews = [...pinnedViews].sort((a, b) => {
+                const aPinned = newPinnedViewIds.includes(a);
+                const bPinned = newPinnedViewIds.includes(b);
+                if (aPinned && !bPinned) return -1;
+                if (!aPinned && bPinned) return 1;
+                if (aPinned && bPinned) return newPinnedViewIds.indexOf(a) - newPinnedViewIds.indexOf(b);
+                return defaultOrder.indexOf(a) - defaultOrder.indexOf(b);
+              });
+            } else {
+              // Pin: add to star list and move to start of pinned section
+              newPinnedViewIds = [viewContextMenu.view, ...pinnedViewIds];
+              newPinnedViews = [viewContextMenu.view, ...pinnedViews.filter(v => v !== viewContextMenu.view)];
+            }
+            
+            setPinnedViewIds(newPinnedViewIds);
+            setPinnedViews(newPinnedViews);
+            setViewContextMenu(null);
+          }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill={pinnedViewIds.includes(viewContextMenu.view) ? "#f59e0b" : "none"} stroke={pinnedViewIds.includes(viewContextMenu.view) ? "#f59e0b" : "currentColor"} strokeWidth="2"><path d="M12 2L15 8L22 9L17 14L18 21L12 17L6 21L7 14L2 9L9 8L12 2Z"/></svg>
+            {pinnedViewIds.includes(viewContextMenu.view) ? 'Unpin view' : 'Pin view'}
+          </div>
+          <div className={styles.contextMenuDivider}></div>
+          <div className={styles.contextMenuItem} style={{ color: '#ef4444' }} onClick={() => { 
+            const newPinned = pinnedViews.filter(v => v !== viewContextMenu.view);
+            setPinnedViews(newPinned);
+            if (activeView === viewContextMenu.view && newPinned.length > 0) {
+              setActiveView(newPinned[0] as any);
+            }
+            setViewContextMenu(null);
+          }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+            Delete view
+          </div>
+        </div>
+      )}
+    </main>
   );
 }
