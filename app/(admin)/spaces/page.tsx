@@ -17,6 +17,7 @@ interface SpaceTask {
   startDate?: string;
   priority?: 'Urgent' | 'High' | 'Normal' | 'Low' | 'Clear';
   description?: string;
+  reminder_at?: string;
 }
 
 const FOLDER_COLORS = ['#f59e0b', '#3b82f6', '#10b981', '#ef4444', '#8b5cf6', '#ec4899', '#6366f1'];
@@ -45,8 +46,8 @@ export default function SpacesPage() {
 
   // Selection state
   const [activeItem, setActiveItem] = useState<{ type: 'space' | 'folder' | 'list', id: string } | null>(null);
-  const [activeView, setActiveView] = useState<'board' | 'list' | 'calendar' | 'gantt' | 'table' | 'dashboard' | 'activity' | 'workload'>('list');
-  const [pinnedViews, setPinnedViews] = useState<string[]>(['list', 'board', 'calendar', 'gantt', 'table', 'dashboard', 'activity', 'workload']);
+  const [activeView, setActiveView] = useState<'board' | 'list' | 'calendar' | 'gantt' | 'table' | 'dashboard' | 'activity' | 'workload' | 'inbox'>('list');
+  const [pinnedViews, setPinnedViews] = useState<string[]>(['list', 'board', 'calendar', 'gantt', 'table', 'dashboard', 'activity', 'workload', 'inbox']);
   const [pinnedViewIds, setPinnedViewIds] = useState<string[]>([]);
   const [draggedView, setDraggedView] = useState<string | null>(null);
   const [isAddViewDropdownOpen, setIsAddViewDropdownOpen] = useState(false);
@@ -61,6 +62,7 @@ export default function SpacesPage() {
   const [isHydrated, setIsHydrated] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number, type: 'space' | 'folder' | 'list' | 'statusGroup' | 'task', id: string, extra?: any } | null>(null);
   const [activeSubMenu, setActiveSubMenu] = useState<'remind' | null>(null);
+  const [isNotificationOpen, setIsNotificationOpen] = useState(false);
 
   // Unified View Persistence
   useEffect(() => {
@@ -483,6 +485,23 @@ export default function SpacesPage() {
 
   const isExpanded = (id: string) => expandedItems[id] !== false;
 
+  const setTaskReminder = async (taskId: string, date: Date) => {
+    const reminderAt = date.toISOString();
+    const res = await fetch('/api/admin/project-tasks', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: taskId, reminder_at: reminderAt })
+    });
+    if (res.ok) {
+      const updated = await res.json();
+      setTasks(tasks.map(t => t.id === taskId ? updated : t));
+    } else {
+      const err = await res.json();
+      console.error('Failed to set reminder:', err);
+      alert('Error: Could not save reminder. Please ensure the "reminder_at" column exists in your database.');
+    }
+  };
+
   // Context Menu Handlers
 
   const handleContextMenu = (e: React.MouseEvent, type: 'space' | 'folder' | 'list' | 'statusGroup' | 'task', id: string, extra?: any) => {
@@ -623,14 +642,55 @@ export default function SpacesPage() {
         {/* Main Content Area */}
         <div className={styles.mainPane}>
           <div className={styles.mainHeader}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <div style={{ fontSize: '24px', fontWeight: 700, color: '#0f172a' }}>
-                {activeItem?.type === 'list' ? lists.find(l => l.id === activeItem.id)?.name :
-                  activeItem?.type === 'folder' ? folders.find(f => f.id === activeItem.id)?.name :
-                    activeItem?.type === 'space' ? spaces.find(s => s.id === activeItem.id)?.name : 'Overview'}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <div style={{ fontSize: '24px', fontWeight: 700, color: '#0f172a' }}>
+                  {activeItem?.type === 'list' ? lists.find(l => l.id === activeItem.id)?.name :
+                    activeItem?.type === 'folder' ? folders.find(f => f.id === activeItem.id)?.name :
+                      activeItem?.type === 'space' ? spaces.find(s => s.id === activeItem.id)?.name : 'Overview'}
+                </div>
+              </div>
+
+              {/* Notification Bell */}
+              <div style={{ position: 'relative' }}>
+                <button
+                  className={styles.notificationBtn}
+                  onClick={(e) => { e.stopPropagation(); setIsNotificationOpen(!isNotificationOpen); }}
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" /></svg>
+                  {tasks.filter(t => t.reminder_at).length > 0 && (
+                    <span className={styles.notificationBadge}>{tasks.filter(t => t.reminder_at).length}</span>
+                  )}
+                </button>
+
+                {isNotificationOpen && (
+                  <div className={styles.notificationDropdown} onClick={(e) => e.stopPropagation()}>
+                    <div className={styles.notificationDropdownHeader}>
+                      <span>Notifications</span>
+                      <button onClick={() => setIsNotificationOpen(false)}>✕</button>
+                    </div>
+                    <div className={styles.notificationDropdownList}>
+                      {tasks.filter(t => t.reminder_at).length === 0 ? (
+                        <div style={{ padding: '20px', textAlign: 'center', color: '#94a3b8', fontSize: '13px' }}>
+                          No new notifications
+                        </div>
+                      ) : (
+                        tasks.filter(t => t.reminder_at).slice(0, 5).map(task => (
+                          <div key={task.id} className={styles.notificationSmallItem} onClick={() => { setActiveView('inbox'); setIsNotificationOpen(false); }}>
+                            <div style={{ fontSize: '13px', fontWeight: 600, color: '#1e293b' }}>{task.title}</div>
+                            <div style={{ fontSize: '11px', color: '#64748b' }}>Reminder for: {new Date(task.reminder_at!).toLocaleDateString()}</div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                    <div className={styles.notificationDropdownFooter}>
+                      <button onClick={() => { setActiveView('inbox'); setIsNotificationOpen(false); }}>View All in Inbox</button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
-
+            
             {activeItem && (
               <div className={styles.viewTabs} style={{ marginTop: 'auto', marginBottom: '-1px' }}>
                 <div className={styles.tabsScrollArea}>
@@ -643,7 +703,8 @@ export default function SpacesPage() {
                           view === 'gantt' ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '6px' }}><path d="M3 7h18M3 12h10M3 17h14" /></svg> :
                             view === 'activity' ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '6px' }}><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg> :
                               view === 'workload' ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '6px' }}><rect x="4" y="4" width="16" height="16" rx="2" ry="2" /><path d="M4 10h16" /><path d="M10 4v16" /></svg> :
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '6px' }}><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><line x1="3" y1="9" x2="21" y2="9" /><line x1="3" y1="15" x2="21" y2="15" /><line x1="9" y1="3" x2="9" y2="21" /><line x1="15" y1="3" x2="15" y2="21" /></svg>;
+                                view === 'inbox' ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '6px' }}><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" /><polyline points="22,6 12,13 2,6" /></svg> :
+                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '6px' }}><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><line x1="3" y1="9" x2="21" y2="9" /><line x1="3" y1="15" x2="21" y2="15" /><line x1="9" y1="3" x2="9" y2="21" /><line x1="15" y1="3" x2="15" y2="21" /></svg>;
 
                     const label = view.charAt(0).toUpperCase() + view.slice(1);
 
@@ -1570,6 +1631,49 @@ export default function SpacesPage() {
                 </div>
               </div>
             )}
+
+            {activeItem && activeView === 'inbox' && (
+              <div className={styles.inboxContainer}>
+                <div className={styles.inboxHeader}>
+                  <h2 style={{ fontSize: '20px', fontWeight: 700, color: '#1e293b' }}>Inbox</h2>
+                  <div style={{ display: 'flex', gap: '12px' }}>
+                    <button className={styles.filterBtnActive}>Important</button>
+                    <button className={styles.filterBtn}>Other</button>
+                  </div>
+                </div>
+
+                <div className={styles.inboxList}>
+                  {currentTasks.filter(t => t.reminder_at).length === 0 ? (
+                    <div className={styles.emptyInbox}>
+                      <div className={styles.emptyInboxIcon}>📬</div>
+                      <h3>Your inbox is empty</h3>
+                      <p>All caught up! New reminders and notifications will appear here.</p>
+                    </div>
+                  ) : (
+                    currentTasks.filter(t => t.reminder_at).map(task => (
+                      <div key={task.id} className={styles.inboxItem}>
+                        <div className={styles.inboxItemStatus} style={{ background: getStatusStyles(task.status).bg }}></div>
+                        <div className={styles.inboxItemContent}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase' }}>{task.status}</span>
+                              <span style={{ fontSize: '11px', color: '#2563eb', fontWeight: 700 }}>⏰ REMINDER</span>
+                            </div>
+                            <span style={{ fontSize: '11px', color: '#94a3b8' }}>Scheduled for: {new Date(task.reminder_at!).toLocaleString()}</span>
+                          </div>
+                          <div style={{ fontSize: '15px', fontWeight: 600, color: '#1e293b', marginBottom: '4px' }}>{task.title}</div>
+                          <div style={{ fontSize: '13px', color: '#64748b' }}>{task.description || 'No description provided.'}</div>
+                        </div>
+                        <div className={styles.inboxItemActions}>
+                          <button className={styles.inboxActionBtn} title="Mark as Done" onClick={() => setTaskReminder(task.id, null as any)}>✓</button>
+                          <button className={styles.inboxActionBtn} title="Reschedule" onClick={(e) => { e.stopPropagation(); handleContextMenu(e, 'task', task.id); }}>⏰</button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -1830,7 +1934,11 @@ export default function SpacesPage() {
                           <div
                             key={day}
                             className={`${styles.calendarDayMini} ${day === 12 ? styles.calendarDayMiniActive : ''}`}
-                            onClick={() => { alert(`Reminder set for May ${day}`); closeContextMenu(); }}
+                            onClick={() => {
+                              const d = new Date(2026, 4, day, 8, 0);
+                              setTaskReminder(contextMenu.id, d);
+                              closeContextMenu();
+                            }}
                           >
                             {day}
                           </div>
@@ -1848,23 +1956,51 @@ export default function SpacesPage() {
 
                     {/* Right: Presets Column */}
                     <div style={{ width: '180px', padding: '12px 0' }}>
-                      <div className={styles.contextMenuItem} onClick={() => { alert('Reminder set for 20 minutes'); closeContextMenu(); }}>
+                      <div className={styles.contextMenuItem} onClick={() => {
+                        const d = new Date();
+                        d.setMinutes(d.getMinutes() + 20);
+                        setTaskReminder(contextMenu.id, d);
+                        closeContextMenu();
+                      }}>
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
                         In 20 minutes
                       </div>
-                      <div className={styles.contextMenuItem} onClick={() => { alert('Reminder set for 2 hours'); closeContextMenu(); }}>
+                      <div className={styles.contextMenuItem} onClick={() => {
+                        const d = new Date();
+                        d.setHours(d.getHours() + 2);
+                        setTaskReminder(contextMenu.id, d);
+                        closeContextMenu();
+                      }}>
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
                         In 2 hours
                       </div>
-                      <div className={styles.contextMenuItem} onClick={() => { alert('Reminder set for Tomorrow'); closeContextMenu(); }}>
+                      <div className={styles.contextMenuItem} onClick={() => {
+                        const d = new Date();
+                        d.setDate(d.getDate() + 1);
+                        d.setHours(8, 0, 0, 0);
+                        setTaskReminder(contextMenu.id, d);
+                        closeContextMenu();
+                      }}>
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" /></svg>
                         Tomorrow
                       </div>
-                      <div className={styles.contextMenuItem} onClick={() => { alert('Reminder set for 2 days'); closeContextMenu(); }}>
+                      <div className={styles.contextMenuItem} onClick={() => {
+                        const d = new Date();
+                        d.setDate(d.getDate() + 2);
+                        d.setHours(8, 0, 0, 0);
+                        setTaskReminder(contextMenu.id, d);
+                        closeContextMenu();
+                      }}>
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
                         In 2 days
                       </div>
-                      <div className={styles.contextMenuItem} onClick={() => { alert('Reminder set for Next Week'); closeContextMenu(); }}>
+                      <div className={styles.contextMenuItem} onClick={() => {
+                        const d = new Date();
+                        d.setDate(d.getDate() + 7);
+                        d.setHours(8, 0, 0, 0);
+                        setTaskReminder(contextMenu.id, d);
+                        closeContextMenu();
+                      }}>
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
                         Next week
                       </div>
