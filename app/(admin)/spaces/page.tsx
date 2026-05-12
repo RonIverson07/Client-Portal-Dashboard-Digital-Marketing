@@ -495,8 +495,8 @@ export default function SpacesPage() {
 
   const isExpanded = (id: string) => expandedItems[id] !== false;
 
-  const setTaskReminder = async (taskId: string, date: Date) => {
-    const reminderAt = date.toISOString();
+  const setTaskReminder = async (taskId: string, date: Date | null) => {
+    const reminderAt = date ? date.toISOString() : null;
     const res = await fetch('/api/admin/project-tasks', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -515,11 +515,12 @@ export default function SpacesPage() {
 
   // Context Menu Handlers
 
-  const handleContextMenu = (e: React.MouseEvent, type: 'space' | 'folder' | 'list' | 'statusGroup' | 'task', id: string, extra?: any) => {
+  const handleContextMenu = (e: React.MouseEvent, type: 'space' | 'folder' | 'list' | 'statusGroup' | 'task', id: string, initialSubMenu?: 'remind' | null, extra?: any) => {
     e.preventDefault();
     e.stopPropagation();
     console.log('ContextMenu Triggered:', type, id);
     setContextMenu({ x: e.clientX, y: e.clientY, type, id, extra });
+    setActiveSubMenu(initialSubMenu || null);
   };
 
   const closeContextMenu = () => {
@@ -1568,7 +1569,7 @@ export default function SpacesPage() {
                 <div className={styles.workloadHeader}>
                   <div style={{ fontSize: '18px', fontWeight: 700, color: '#0f172a' }}>Workload</div>
                   <div style={{ display: 'flex', gap: '8px' }}>
-                    <select 
+                    <select
                       value={workloadRange}
                       onChange={(e) => setWorkloadRange(parseInt(e.target.value))}
                       style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '12px', fontWeight: 500, color: '#475569', outline: 'none' }}
@@ -1676,8 +1677,8 @@ export default function SpacesPage() {
                           <div style={{ fontSize: '13px', color: '#64748b' }}>{task.description || 'No description provided.'}</div>
                         </div>
                         <div className={styles.inboxItemActions}>
-                          <button className={styles.inboxActionBtn} title="Mark as Done" onClick={() => setTaskReminder(task.id, null as any)}>✓</button>
-                          <button className={styles.inboxActionBtn} title="Reschedule" onClick={(e) => { e.stopPropagation(); handleContextMenu(e, 'task', task.id); }}>⏰</button>
+                          <button className={styles.inboxActionBtn} title="Mark as Done" onClick={() => setTaskReminder(task.id, null)}>✓</button>
+                          <button className={styles.inboxActionBtn} title="Options" onClick={(e) => { e.stopPropagation(); handleContextMenu(e, 'task', task.id, 'remind'); }}>⋯</button>
                         </div>
                       </div>
                     ))
