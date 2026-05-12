@@ -14,6 +14,7 @@ interface SpaceTask {
   status: string;
   assignee?: string;
   dueDate?: string;
+  startDate?: string;
   priority?: 'Urgent' | 'High' | 'Normal' | 'Low' | 'Clear';
   description?: string;
 }
@@ -44,8 +45,10 @@ export default function SpacesPage() {
   
   // Selection state
   const [activeItem, setActiveItem] = useState<{type: 'space'|'folder'|'list', id: string} | null>(null);
-  const [activeView, setActiveView] = useState<'board' | 'list' | 'calendar'>('list');
+  const [activeView, setActiveView] = useState<'board' | 'list' | 'calendar' | 'gantt'>('list');
   const [viewDate, setViewDate] = useState(new Date());
+  const [calendarView, setCalendarView] = useState<'month' | 'week' | 'day'>('month');
+  const [isViewDropdownOpen, setIsViewDropdownOpen] = useState(false);
 
   const [loading, setLoading] = useState(true);
 
@@ -108,10 +111,10 @@ export default function SpacesPage() {
     targetType?: 'space' | 'folder' | 'list' | 'statusGroup' | 'task';
     inputValue: string;
     moveTargetId?: string;
-    // Task specific fields
     description: string;
     assignee: string;
     dueDate: string;
+    startDate: string;
     priority: 'Urgent' | 'High' | 'Normal' | 'Low' | 'Clear';
   }>({
     isOpen: false,
@@ -120,7 +123,8 @@ export default function SpacesPage() {
     description: '',
     assignee: '',
     dueDate: '',
-    priority: 'Normal'
+    startDate: '',
+    priority: 'Normal',
   });
 
   const openModal = (type: 'Space' | 'Folder' | 'List' | 'Task' | 'Rename' | 'Delete' | 'Move' | 'Color', targetId?: string, targetType?: 'space' | 'folder' | 'list' | 'statusGroup' | 'task', initialValue: string = '') => {
@@ -134,7 +138,8 @@ export default function SpacesPage() {
       description: '',
       assignee: '',
       dueDate: '',
-      priority: 'Normal'
+      startDate: '',
+      priority: 'Normal',
     });
   };
 
@@ -144,7 +149,7 @@ export default function SpacesPage() {
 
   const handleModalSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const { type, targetId, targetType, inputValue, moveTargetId, description, assignee, dueDate, priority } = modalConfig;
+    const { type, targetId, targetType, inputValue, moveTargetId, description, assignee, dueDate, startDate, priority } = modalConfig;
 
     try {
       if (type === 'Delete' && targetId && targetType) {
@@ -228,12 +233,13 @@ export default function SpacesPage() {
             description,
             assignee,
             due_date: dueDate,
+            start_date: startDate,
             priority
           })
         });
         if (res.ok) {
           const newItem = await res.json();
-          setTasks([...tasks, { ...newItem, listId: newItem.list_id, dueDate: newItem.due_date }]);
+          setTasks([...tasks, { ...newItem, listId: newItem.list_id, dueDate: newItem.due_date, startDate: newItem.start_date }]);
         }
       } else if (type === 'Rename' && targetId && targetType) {
         const url = targetType === 'task' ? '/api/admin/project-tasks' : '/api/admin/spaces';
@@ -386,7 +392,7 @@ export default function SpacesPage() {
   };
 
   return (
-    <div className={styles.container} onClick={closeContextMenu}>
+    <div className={styles.container} onClick={() => { closeContextMenu(); setIsViewDropdownOpen(false); }}>
       <div className={styles.content}>
         
         {/* Hierarchical Sidebar */}
@@ -487,6 +493,7 @@ export default function SpacesPage() {
                 <button className={`${styles.tabBtn} ${activeView === 'list' ? styles.tabActive : ''}`} onClick={() => setActiveView('list')}>List</button>
                 <button className={`${styles.tabBtn} ${activeView === 'board' ? styles.tabActive : ''}`} onClick={() => setActiveView('board')}>Board</button>
                 <button className={`${styles.tabBtn} ${activeView === 'calendar' ? styles.tabActive : ''}`} onClick={() => setActiveView('calendar')}>Calendar</button>
+                <button className={`${styles.tabBtn} ${activeView === 'gantt' ? styles.tabActive : ''}`} onClick={() => setActiveView('gantt')}>Gantt</button>
                 
                 {/* Add Task button */}
                 <button 
@@ -685,75 +692,257 @@ export default function SpacesPage() {
               <div className={styles.calendarContainer}>
                 <div className={styles.calendarHeader}>
                   <div className={styles.calendarHeaderLeft}>
-                    <button className={styles.todayBtn} onClick={() => setViewDate(new Date())}>Today</button>
+                    
+                    <div className={styles.viewDropdownContainer}>
+                      <button 
+                        className={styles.viewDropdownBtn} 
+                        onClick={(e) => { e.stopPropagation(); setIsViewDropdownOpen(!isViewDropdownOpen); }}
+                      >
+                        {calendarView.charAt(0).toUpperCase() + calendarView.slice(1)}
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{marginLeft: '4px'}}>
+                          <path d={isViewDropdownOpen ? "m18 15-6-6-6 6" : "m6 9 6 6 6-6"}/>
+                        </svg>
+                      </button>
+                      
+                      {isViewDropdownOpen && (
+                        <div className={styles.viewDropdown}>
+                          <div className={styles.viewDropdownItem} onClick={(e) => { e.stopPropagation(); setCalendarView('month'); setIsViewDropdownOpen(false); }}>Month</div>
+                          <div className={styles.viewDropdownItem} onClick={(e) => { e.stopPropagation(); setCalendarView('week'); setIsViewDropdownOpen(false); }}>Week</div>
+                          <div className={styles.viewDropdownItem} onClick={(e) => { e.stopPropagation(); setCalendarView('day'); setIsViewDropdownOpen(false); }}>Day</div>
+                        </div>
+                      )}
+                    </div>
                     <div className={styles.dateNav}>
-                      <button className={styles.navBtn} onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1))}>
+                      <button className={styles.navBtn} onClick={() => {
+                        if (calendarView === 'month') setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1));
+                        else if (calendarView === 'week') setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth(), viewDate.getDate() - 7));
+                        else setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth(), viewDate.getDate() - 1));
+                      }}>
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m15 18-6-6 6-6"/></svg>
                       </button>
-                      <button className={styles.navBtn} onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1))}>
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m9 18 6-6-6-6" transform="rotate(180 12 12)"/></svg>
+                      <button className={styles.navBtn} onClick={() => {
+                        if (calendarView === 'month') setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1));
+                        else if (calendarView === 'week') setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth(), viewDate.getDate() + 7));
+                        else setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth(), viewDate.getDate() + 1));
+                      }}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m9 18 6-6-6-6"/></svg>
                       </button>
                     </div>
                     <div className={styles.currentMonth}>
-                      {viewDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
+                      {(() => {
+                        if (calendarView === 'month') return viewDate.toLocaleString('default', { month: 'long', year: 'numeric' });
+                        if (calendarView === 'week') {
+                          const start = new Date(viewDate); start.setDate(viewDate.getDate() - viewDate.getDay());
+                          const end = new Date(start); end.setDate(start.getDate() + 6);
+                          return `${start.toLocaleDateString('default', { month: 'short', day: 'numeric' })} - ${end.toLocaleDateString('default', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+                        }
+                        return viewDate.toLocaleDateString('default', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+                      })()}
                     </div>
                   </div>
                 </div>
 
-                <div className={styles.calendarGrid}>
-                  {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-                    <div key={day} className={styles.weekdayHeader}>{day}</div>
-                  ))}
-                  
-                  {(() => {
-                    const days = [];
-                    const startOfMonth = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1);
-                    const endOfMonth = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 0);
-                    const startDay = startOfMonth.getDay();
-                    
-                    for (let i = startDay - 1; i >= 0; i--) {
-                      const d = new Date(viewDate.getFullYear(), viewDate.getMonth(), -i);
-                      days.push({ date: d, isCurrentMonth: false });
-                    }
-                    
-                    for (let i = 1; i <= endOfMonth.getDate(); i++) {
-                      const d = new Date(viewDate.getFullYear(), viewDate.getMonth(), i);
-                      days.push({ date: d, isCurrentMonth: true });
-                    }
-                    
-                    const remaining = 42 - days.length;
-                    for (let i = 1; i <= remaining; i++) {
-                      const d = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, i);
-                      days.push({ date: d, isCurrentMonth: false });
-                    }
-                    
-                    return days.map((dayObj, idx) => {
-                      const dateStr = dayObj.date.toISOString().split('T')[0];
-                      const dayTasks = currentTasks.filter(t => t.dueDate === dateStr);
-                      const isToday = new Date().toDateString() === dayObj.date.toDateString();
+                <div className={styles.calendarBody}>
+                  {calendarView === 'month' ? (
+                    <div className={styles.calendarGrid}>
+                      {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                        <div key={day} className={styles.weekdayHeader}>{day}</div>
+                      ))}
                       
-                      return (
-                        <div key={idx} className={`${styles.calendarDay} ${!dayObj.isCurrentMonth ? styles.otherMonth : ''} ${isToday ? styles.todayDay : ''}`}>
-                          <div className={styles.dayLabel}>{dayObj.date.getDate()}</div>
-                          <div className={styles.dayTasks}>
-                            {dayTasks.map(task => {
-                              const { color: statusColor } = getStatusStyles(task.status);
-                              return (
-                                <div 
-                                  key={task.id} 
-                                  className={styles.calendarTask}
-                                  style={{ borderLeftColor: statusColor }}
-                                  onContextMenu={(e) => handleContextMenu(e, 'task', task.id)}
-                                >
-                                  {task.title}
+                      {(() => {
+                        const days = [];
+                        const startOfMonth = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1);
+                        const endOfMonth = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 0);
+                        const startDay = startOfMonth.getDay();
+                        
+                        for (let i = startDay - 1; i >= 0; i--) {
+                          const d = new Date(viewDate.getFullYear(), viewDate.getMonth(), -i);
+                          days.push({ date: d, isCurrentMonth: false });
+                        }
+                        
+                        for (let i = 1; i <= endOfMonth.getDate(); i++) {
+                          const d = new Date(viewDate.getFullYear(), viewDate.getMonth(), i);
+                          days.push({ date: d, isCurrentMonth: true });
+                        }
+                        
+                        const remaining = 42 - days.length;
+                        for (let i = 1; i <= remaining; i++) {
+                          const d = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, i);
+                          days.push({ date: d, isCurrentMonth: false });
+                        }
+                        
+                        return days.map((dayObj, idx) => {
+                          const dateStr = dayObj.date.toISOString().split('T')[0];
+                          const dayTasks = currentTasks.filter(t => t.dueDate === dateStr);
+                          const isToday = new Date().toDateString() === dayObj.date.toDateString();
+                          
+                          return (
+                            <div key={idx} className={`${styles.calendarDay} ${!dayObj.isCurrentMonth ? styles.otherMonth : ''} ${isToday ? styles.todayDay : ''}`}>
+                              <div className={styles.dayLabel}>{dayObj.date.getDate()}</div>
+                              <div className={styles.dayTasks}>
+                                {dayTasks.map(task => {
+                                  const { color: statusColor } = getStatusStyles(task.status);
+                                  return (
+                                    <div 
+                                      key={task.id} 
+                                      className={styles.calendarTask}
+                                      style={{ borderLeftColor: statusColor }}
+                                      onContextMenu={(e) => handleContextMenu(e, 'task', task.id)}
+                                    >
+                                      {task.title}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        });
+                      })()}
+                    </div>
+                  ) : calendarView === 'week' ? (
+                    <div className={styles.weekView}>
+                      <div className={styles.weekHeader}>
+                        <div className={styles.timeGutter}></div>
+                        {Array.from({ length: 7 }).map((_, i) => {
+                          const d = new Date(viewDate);
+                          d.setDate(viewDate.getDate() - viewDate.getDay() + i);
+                          const isToday = new Date().toDateString() === d.toDateString();
+                          return (
+                            <div key={i} className={`${styles.weekDayColumnHeader} ${isToday ? styles.todayHighlight : ''}`}>
+                              <span className={styles.weekDayName}>{d.toLocaleDateString('default', { weekday: 'short' })}</span>
+                              <span className={styles.weekDayNumber}>{d.getDate()}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className={styles.weekBody}>
+                        <div className={styles.timeGutter}>
+                          {Array.from({ length: 24 }).map((_, i) => (
+                            <div key={i} className={styles.hourLabel}>{i === 0 ? '12 AM' : i < 12 ? `${i} AM` : i === 12 ? '12 PM' : `${i - 12} PM`}</div>
+                          ))}
+                        </div>
+                        <div className={styles.weekGrid}>
+                          {Array.from({ length: 7 }).map((_, i) => {
+                            const d = new Date(viewDate);
+                            d.setDate(viewDate.getDate() - viewDate.getDay() + i);
+                            const dateStr = d.toISOString().split('T')[0];
+                            const dayTasks = currentTasks.filter(t => t.dueDate === dateStr);
+                            return (
+                              <div key={i} className={styles.weekColumn}>
+                                <div className={styles.allDaySection}>
+                                  {dayTasks.map(task => (
+                                    <div key={task.id} className={styles.calendarTask} style={{ borderLeftColor: getStatusStyles(task.status).color }}>
+                                      {task.title}
+                                    </div>
+                                  ))}
                                 </div>
-                              );
-                            })}
+                                {Array.from({ length: 24 }).map((_, h) => (
+                                  <div key={h} className={styles.hourSlot}></div>
+                                ))}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className={styles.dayView}>
+                      <div className={styles.dayHeader}>
+                        <div className={styles.timeGutter}></div>
+                        <div className={styles.dayColumnHeader}>
+                          <span className={styles.weekDayName}>{viewDate.toLocaleDateString('default', { weekday: 'long' })}</span>
+                          <span className={styles.weekDayNumber}>{viewDate.getDate()}</span>
+                        </div>
+                      </div>
+                      <div className={styles.dayBody}>
+                        <div className={styles.timeGutter}>
+                          {Array.from({ length: 24 }).map((_, i) => (
+                            <div key={i} className={styles.hourLabel}>{i === 0 ? '12 AM' : i < 12 ? `${i} AM` : i === 12 ? '12 PM' : `${i - 12} PM`}</div>
+                          ))}
+                        </div>
+                        <div className={styles.dayColumn}>
+                          <div className={styles.allDaySection}>
+                            {currentTasks.filter(t => t.dueDate === viewDate.toISOString().split('T')[0]).map(task => (
+                              <div key={task.id} className={styles.calendarTask} style={{ borderLeftColor: getStatusStyles(task.status).color }}>
+                                {task.title}
+                              </div>
+                            ))}
                           </div>
+                          {Array.from({ length: 24 }).map((_, h) => (
+                            <div key={h} className={styles.hourSlot}></div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {activeItem && activeView === 'gantt' && (
+              <div className={styles.ganttContainer}>
+                <div className={styles.ganttSidebar}>
+                  <div className={styles.ganttSidebarHeader}>Task Name</div>
+                  {currentTasks.map(task => (
+                    <div key={task.id} className={styles.ganttSidebarItem}>
+                      <div className={styles.statusIconCircle} style={{ borderColor: getStatusStyles(task.status).color, width: '10px', height: '10px', marginRight: '8px' }}></div>
+                      {task.title}
+                    </div>
+                  ))}
+                </div>
+                <div className={styles.ganttTimeline}>
+                  <div className={styles.ganttTimelineHeader}>
+                    {Array.from({ length: 30 }).map((_, i) => {
+                      const d = new Date(viewDate);
+                      d.setDate(viewDate.getDate() + i);
+                      return (
+                        <div key={i} className={styles.ganttDayColumn}>
+                          <div className={styles.ganttDayName}>{d.toLocaleDateString('default', { weekday: 'short' })}</div>
+                          <div className={styles.ganttDayNumber}>{d.getDate()}</div>
                         </div>
                       );
-                    });
-                  })()}
+                    })}
+                  </div>
+                  <div className={styles.ganttTimelineBody}>
+                    {currentTasks.map(task => {
+                      const startDate = task.startDate ? new Date(task.startDate) : (task.dueDate ? new Date(task.dueDate) : null);
+                      const dueDate = task.dueDate ? new Date(task.dueDate) : (task.startDate ? new Date(task.startDate) : null);
+                      
+                      let offset = 0;
+                      let width = 100; // Default 1 day
+                      
+                      if (startDate) {
+                        const startDiff = startDate.getTime() - viewDate.getTime();
+                        offset = Math.floor(startDiff / (1000 * 60 * 60 * 24));
+                      }
+                      
+                      if (startDate && dueDate) {
+                        const durationDiff = dueDate.getTime() - startDate.getTime();
+                        width = Math.max(100, (Math.floor(durationDiff / (1000 * 60 * 60 * 24)) + 1) * 100);
+                      }
+                      
+                      return (
+                        <div key={task.id} className={styles.ganttRow}>
+                          {Array.from({ length: 30 }).map((_, i) => (
+                            <div key={i} className={styles.ganttDayCell}></div>
+                          ))}
+                          {(startDate || dueDate) && offset + (width/100) > 0 && offset < 30 && (
+                            <div 
+                              className={styles.ganttBar} 
+                              style={{ 
+                                left: `${offset * 100}px`, 
+                                width: `${width}px`,
+                                background: getStatusStyles(task.status).color
+                              }}
+                              title={`${task.title}${startDate ? ' | Start: ' + task.startDate : ''}${dueDate ? ' | Due: ' + task.dueDate : ''}`}
+                            >
+                              {task.title}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             )}
@@ -864,6 +1053,18 @@ export default function SpacesPage() {
 
                       <div className={styles.pillBtn}>
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                        <span style={{ fontSize: '11px', color: '#64748b', marginLeft: '4px', marginRight: '-4px' }}>Start:</span>
+                        <input 
+                          type="date" 
+                          style={{border:'none', background:'transparent', fontSize:'inherit', outline:'none', cursor:'pointer'}}
+                          value={modalConfig.startDate}
+                          onChange={e => setModalConfig({...modalConfig, startDate: e.target.value})}
+                        />
+                      </div>
+
+                      <div className={styles.pillBtn}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                        <span style={{ fontSize: '11px', color: '#64748b', marginLeft: '4px', marginRight: '-4px' }}>Due:</span>
                         <input 
                           type="date" 
                           style={{border:'none', background:'transparent', fontSize:'inherit', outline:'none', cursor:'pointer'}}
