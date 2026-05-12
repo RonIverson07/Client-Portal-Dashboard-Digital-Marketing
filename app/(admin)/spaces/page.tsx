@@ -280,10 +280,16 @@ export default function SpacesPage() {
 
     try {
       if (type === 'Delete' && targetId && targetType) {
-        const url = targetType === 'task' ? `/api/admin/project-tasks?id=${targetId}` : `/api/admin/spaces?id=${targetId}&type=${targetType}`;
+        let idsToDelete = targetId;
+        if (targetType === 'task' && selectedTaskIds.has(targetId) && selectedTaskIds.size > 1) {
+          idsToDelete = Array.from(selectedTaskIds).join(',');
+        }
+
+        const url = targetType === 'task' ? `/api/admin/project-tasks?id=${idsToDelete}` : `/api/admin/spaces?id=${targetId}&type=${targetType}`;
         const res = await fetch(url, { method: 'DELETE' });
         if (res.ok) {
-          performDelete(targetType, targetId);
+          performDelete(targetType, idsToDelete);
+          if (targetType === 'task' && idsToDelete.includes(',')) clearSelection();
           closeModal();
         } else {
           const err = await res.json();
@@ -420,21 +426,26 @@ export default function SpacesPage() {
     }
   };
 
-  const performDelete = (type: 'space' | 'folder' | 'list' | 'statusGroup' | 'task', id: string) => {
+  const performDelete = (type: 'space' | 'folder' | 'list' | 'statusGroup' | 'task', idOrIds: string) => {
+    const ids = idOrIds.split(',');
+    
     if (type === 'space') {
+      const id = ids[0];
       setSpaces(spaces.filter(s => s.id !== id));
       setFolders(folders.filter(f => f.spaceId !== id));
       setLists(lists.filter(l => l.parentId !== id));
     } else if (type === 'folder') {
+      const id = ids[0];
       setFolders(folders.filter(f => f.id !== id));
       setLists(lists.filter(l => l.parentId !== id));
     } else if (type === 'list') {
+      const id = ids[0];
       setLists(lists.filter(l => l.id !== id));
       setTasks(tasks.filter(t => t.listId !== id));
     } else if (type === 'task') {
-      setTasks(tasks.filter(t => t.id !== id));
+      setTasks(tasks.filter(t => !ids.includes(t.id)));
     }
-    if (activeItem?.id === id) setActiveItem(null);
+    if (ids.includes(activeItem?.id || '')) setActiveItem(null);
   };
 
   const addSpace = () => openModal('Space');
@@ -2160,10 +2171,7 @@ export default function SpacesPage() {
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m9 11 3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>
                 Select all
               </div>
-              <div className={styles.contextMenuItem} onClick={() => { openModal('Rename', contextMenu.id, 'statusGroup'); closeContextMenu(); }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /></svg>
-                Rename
-              </div>
+
               <div className={styles.contextMenuItem} onClick={() => { closeContextMenu(); }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="3" /></svg>
                 Edit statuses
