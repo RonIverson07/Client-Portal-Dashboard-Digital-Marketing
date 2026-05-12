@@ -31,7 +31,7 @@ export async function PATCH(req: NextRequest) {
   if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
-    const { id, ...updates } = await req.json();
+    const { id, type, ...updates } = await req.json();
     const { data, error } = await supabase.from('project_tasks').update(updates).eq('id', id).select().single();
     if (error) throw error;
     return NextResponse.json(data);
