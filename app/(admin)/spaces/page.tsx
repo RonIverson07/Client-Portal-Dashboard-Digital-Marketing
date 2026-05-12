@@ -422,10 +422,26 @@ export default function SpacesPage() {
     e.preventDefault();
   };
 
-  const handleDrop = (e: React.DragEvent, newStatus: string) => {
+  const handleDrop = async (e: React.DragEvent, newStatus: string) => {
     e.preventDefault();
     if (!draggedTaskId) return;
+    
+    // 1. Optimistic UI update
     setTasks(prev => prev.map(t => t.id === draggedTaskId ? { ...t, status: newStatus } : t));
+    
+    // 2. Persist to DB
+    try {
+      const res = await fetch('/api/admin/project-tasks', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: draggedTaskId, status: newStatus })
+      });
+      if (!res.ok) throw new Error('DB update failed');
+    } catch (err) {
+      console.error('Board sync error:', err);
+      // Optional: Rollback if needed, but let's keep it simple for now
+    }
+    
     setDraggedTaskId(null);
   };
 
