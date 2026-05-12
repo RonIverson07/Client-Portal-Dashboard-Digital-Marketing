@@ -2006,3 +2006,35 @@
   text-decoration: underline;
 }
 
+
+.toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 12px 24px;
+  border-radius: 50px;
+  color: white;
+  font-weight: 600;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2);
+  z-index: 10000;
+  animation: slideUp 0.3s ease;
+}
+
+.toastSuccess {
+  background: #10b981;
+}
+
+.toastError {
+  background: #ef4444;
+}
+
+@keyframes slideUp {
+  from { transform: translate(-50%, 20px); opacity: 0; }
+  to { transform: translate(-50%, 0); opacity: 1; }
+}
+

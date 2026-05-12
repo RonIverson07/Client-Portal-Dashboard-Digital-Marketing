@@ -63,6 +63,13 @@ export default function SpacesPage() {
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number, type: 'space' | 'folder' | 'list' | 'statusGroup' | 'task', id: string, extra?: any } | null>(null);
   const [activeSubMenu, setActiveSubMenu] = useState<'remind' | null>(null);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [manualDate, setManualDate] = useState<{ day: number, time: string }>({ day: 12, time: '08:00' });
+
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
 
   // Unified View Persistence
   useEffect(() => {
@@ -133,6 +140,13 @@ export default function SpacesPage() {
     fetchData();
   }, []);
 
+  const mapTask = (t: any): SpaceTask => ({
+    ...t,
+    listId: t.list_id || t.listId,
+    dueDate: t.due_date || t.dueDate,
+    startDate: t.start_date || t.startDate
+  });
+
   const fetchData = async () => {
     setLoading(true);
     try {
@@ -160,12 +174,7 @@ export default function SpacesPage() {
         }));
         setLists(mappedLists);
 
-        const mappedTasks = (taskData.tasks || []).map((t: any) => ({
-          ...t,
-          listId: t.list_id,
-          dueDate: t.due_date,
-          startDate: t.start_date
-        }));
+        const mappedTasks = (taskData.tasks || []).map(mapTask);
         setTasks(mappedTasks);
 
         // Auto-select first list if nothing selected
@@ -265,7 +274,7 @@ export default function SpacesPage() {
         if (res.ok) {
           const updated = await res.json();
           if (targetType === 'list') setLists(lists.map(l => l.id === targetId ? updated : l));
-          else if (targetType === 'task') setTasks(tasks.map(t => t.id === targetId ? updated : t));
+          else if (targetType === 'task') setTasks(tasks.map(t => t.id === targetId ? mapTask(updated) : t));
           closeModal();
         }
         return;
@@ -494,11 +503,12 @@ export default function SpacesPage() {
     });
     if (res.ok) {
       const updated = await res.json();
-      setTasks(tasks.map(t => t.id === taskId ? updated : t));
+      setTasks(tasks.map(t => t.id === taskId ? mapTask(updated) : t));
+      showToast('Reminder set successfully!');
     } else {
       const err = await res.json();
       console.error('Failed to set reminder:', err);
-      alert('Error: Could not save reminder. Please ensure the "reminder_at" column exists in your database.');
+      showToast('Error: Could not save reminder.', 'error');
     }
   };
 
@@ -1636,10 +1646,6 @@ export default function SpacesPage() {
               <div className={styles.inboxContainer}>
                 <div className={styles.inboxHeader}>
                   <h2 style={{ fontSize: '20px', fontWeight: 700, color: '#1e293b' }}>Inbox</h2>
-                  <div style={{ display: 'flex', gap: '12px' }}>
-                    <button className={styles.filterBtnActive}>Important</button>
-                    <button className={styles.filterBtn}>Other</button>
-                  </div>
                 </div>
 
                 <div className={styles.inboxList}>
@@ -1916,7 +1922,7 @@ export default function SpacesPage() {
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m9 18 6-6-6-6" /></svg>
 
                 {activeSubMenu === 'remind' && (
-                  <div className={styles.contextSubMenu} style={{ right: '100%', top: '-100px', marginRight: '2px', width: '450px', display: 'flex' }}>
+                  <div className={styles.contextSubMenu} style={{ right: '100%', top: '-100px', marginRight: '2px', width: '450px', display: 'flex' }} onClick={e => e.stopPropagation()}>
                     {/* Left: Calendar Column */}
                     <div style={{ flex: 1, borderRight: '1px solid #e2e8f0', padding: '12px 0' }}>
                       <div className={styles.calendarHeaderMini}>
@@ -1933,24 +1939,36 @@ export default function SpacesPage() {
                         {Array.from({ length: 31 }, (_, i) => i + 1).map(day => (
                           <div
                             key={day}
-                            className={`${styles.calendarDayMini} ${day === 12 ? styles.calendarDayMiniActive : ''}`}
-                            onClick={() => {
-                              const d = new Date(2026, 4, day, 8, 0);
-                              setTaskReminder(contextMenu.id, d);
-                              closeContextMenu();
+                            className={`${styles.calendarDayMini} ${manualDate.day === day ? styles.calendarDayMiniActive : ''}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setManualDate(prev => ({ ...prev, day }));
                             }}
                           >
                             {day}
                           </div>
                         ))}
                       </div>
-                      <div style={{ padding: '0 12px' }}>
+                      <div style={{ padding: '0 12px', display: 'flex', gap: '8px', alignItems: 'center' }} onClick={e => e.stopPropagation()}>
                         <input
                           type="time"
-                          defaultValue="08:00"
+                          value={manualDate.time}
                           className={styles.dateInputSmall}
-                          style={{ marginTop: '8px' }}
+                          style={{ marginTop: '8px', flex: 1 }}
+                          onChange={(e) => setManualDate(prev => ({ ...prev, time: e.target.value }))}
                         />
+                        <button
+                          style={{ marginTop: '8px', padding: '4px 12px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '4px', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}
+                          onClick={() => {
+                            const d = new Date(2026, 4, manualDate.day);
+                            const [h, m] = manualDate.time.split(':');
+                            d.setHours(parseInt(h), parseInt(m));
+                            setTaskReminder(contextMenu.id, d);
+                            closeContextMenu();
+                          }}
+                        >
+                          Set
+                        </button>
                       </div>
                     </div>
 
@@ -2106,6 +2124,13 @@ export default function SpacesPage() {
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" /></svg>
             Delete view
           </div>
+        </div>
+      )}
+
+      {/* Success/Error Toast */}
+      {toast && (
+        <div className={`${styles.toast} ${toast.type === 'error' ? styles.toastError : styles.toastSuccess}`}>
+          {toast.type === 'success' ? '✓' : '✕'} {toast.message}
         </div>
       )}
     </main>
