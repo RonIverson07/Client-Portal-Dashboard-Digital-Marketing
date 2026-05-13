@@ -57,7 +57,7 @@ export default function SpacesPage() {
 
   // Selection state
   const [activeItem, setActiveItem] = useState<{ type: 'space' | 'folder' | 'list', id: string } | null>(null);
-  const [activeView, setActiveView] = useState<'board' | 'list' | 'calendar' | 'gantt' | 'table' | 'dashboard' | 'activity' | 'workload' | 'inbox' | 'archived'>('list');
+  const [activeView, setActiveView] = useState<'board' | 'list' | 'calendar' | 'gantt' | 'table' | 'dashboard' | 'activity' | 'workload' | 'inbox' | 'archived' | 'team'>('list');
   const [pinnedViews, setPinnedViews] = useState<string[]>(['list', 'board', 'calendar', 'gantt', 'table', 'dashboard', 'activity', 'workload', 'inbox']);
   const [pinnedViewIds, setPinnedViewIds] = useState<string[]>([]);
   const [draggedView, setDraggedView] = useState<string | null>(null);
@@ -289,6 +289,7 @@ export default function SpacesPage() {
         const res = await fetch(url, { method: 'DELETE' });
         if (res.ok) {
           performDelete(targetType, idsToDelete);
+          showToast(`${targetType.charAt(0).toUpperCase() + targetType.slice(1)}${idsToDelete.includes(',') ? 's' : ''} deleted successfully`);
           if (targetType === 'task' && idsToDelete.includes(',')) clearSelection();
           closeModal();
         } else {
@@ -321,9 +322,12 @@ export default function SpacesPage() {
         });
         if (res.ok) {
           const updated = await res.json();
-          if (targetType === 'list') setLists(lists.map(l => l.id === targetId ? updated : l));
-          else if (targetType === 'task') {
+          if (targetType === 'list') {
+            setLists(lists.map(l => l.id === targetId ? updated : l));
+            showToast('List moved successfully');
+          } else if (targetType === 'task') {
             setTasks(tasks.map(t => t.id === targetId ? mapTask(updated) : t));
+            showToast('Task moved successfully');
             fetchLogs();
           }
           closeModal();
@@ -339,6 +343,7 @@ export default function SpacesPage() {
         if (res.ok) {
           const newItem = await res.json();
           setSpaces([...spaces, newItem]);
+          showToast('Space created successfully');
         }
       } else if (type === 'Folder' && targetId) {
         const res = await fetch('/api/admin/spaces', {
@@ -348,6 +353,7 @@ export default function SpacesPage() {
         if (res.ok) {
           const newItem = await res.json();
           setFolders([...folders, { ...newItem, spaceId: newItem.space_id }]);
+          showToast('Folder created successfully');
         }
       } else if (type === 'List' && targetId) {
         const res = await fetch('/api/admin/spaces', {
@@ -357,6 +363,7 @@ export default function SpacesPage() {
         if (res.ok) {
           const newItem = await res.json();
           setLists([...lists, { ...newItem, parentId: newItem.parent_id }]);
+          showToast('List created successfully');
         }
       } else if (type === 'Task' && targetId) {
         let actualListId = targetId;
@@ -394,10 +401,12 @@ export default function SpacesPage() {
         if (res.ok) {
           const newItem = await res.json();
           setTasks([...tasks, { ...newItem, listId: newItem.list_id, dueDate: newItem.due_date, startDate: newItem.start_date }]);
+          showToast('Task created successfully');
+          fetchLogs();
         }
       } else if (type === 'Rename' && targetId && targetType) {
         const url = targetType === 'task' ? '/api/admin/project-tasks' : '/api/admin/spaces';
-        const body: any = { id: targetId, type: targetType };
+        const body: any = { id: targetId };
         if (targetType === 'task') {
           body.title = inputValue;
           body.description = description;
@@ -406,6 +415,7 @@ export default function SpacesPage() {
           body.start_date = startDate || null;
           body.priority = priority;
         } else {
+          body.type = targetType;
           body.name = inputValue;
         }
         const res = await fetch(url, {
@@ -414,10 +424,20 @@ export default function SpacesPage() {
         });
         if (res.ok) {
           const updated = await res.json();
-          if (targetType === 'space') setSpaces(spaces.map(s => s.id === targetId ? updated : s));
-          else if (targetType === 'folder') setFolders(folders.map(f => f.id === targetId ? { ...updated, spaceId: updated.space_id } : f));
-          else if (targetType === 'list') setLists(lists.map(l => l.id === targetId ? { ...updated, parentId: updated.parent_id } : l));
-          else if (targetType === 'task') setTasks(tasks.map(t => t.id === targetId ? { ...updated, listId: updated.list_id, dueDate: updated.due_date, startDate: updated.start_date } : t));
+          if (targetType === 'space') {
+            setSpaces(spaces.map(s => s.id === targetId ? updated : s));
+            showToast('Space renamed successfully');
+          } else if (targetType === 'folder') {
+            setFolders(folders.map(f => f.id === targetId ? { ...updated, spaceId: updated.space_id } : f));
+            showToast('Folder renamed successfully');
+          } else if (targetType === 'list') {
+            setLists(lists.map(l => l.id === targetId ? { ...updated, parentId: updated.parent_id } : l));
+            showToast('List renamed successfully');
+          } else if (targetType === 'task') {
+            setTasks(tasks.map(t => t.id === targetId ? { ...updated, listId: updated.list_id, dueDate: updated.due_date, startDate: updated.start_date } : t));
+            showToast('Task updated successfully');
+            fetchLogs();
+          }
         }
       }
       closeModal();
@@ -860,7 +880,8 @@ export default function SpacesPage() {
                               view === 'workload' ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '6px' }}><rect x="4" y="4" width="16" height="16" rx="2" ry="2" /><path d="M4 10h16" /><path d="M10 4v16" /></svg> :
                                 view === 'inbox' ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '6px' }}><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" /><polyline points="22,6 12,13 2,6" /></svg> :
                                   view === 'archived' ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '6px' }}><rect width="20" height="5" x="2" y="3" rx="1" /><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" /><path d="M10 12h4" /></svg> :
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '6px' }}><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><line x1="3" y1="9" x2="21" y2="9" /><line x1="3" y1="15" x2="21" y2="15" /><line x1="9" y1="3" x2="9" y2="21" /><line x1="15" y1="3" x2="15" y2="21" /></svg>;
+                                    view === 'team' ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '6px' }}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg> :
+                                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '6px' }}><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><line x1="3" y1="9" x2="21" y2="9" /><line x1="3" y1="15" x2="21" y2="15" /><line x1="9" y1="3" x2="9" y2="21" /><line x1="15" y1="3" x2="15" y2="21" /></svg>;
 
                     const label = view.charAt(0).toUpperCase() + view.slice(1);
 
@@ -998,6 +1019,15 @@ export default function SpacesPage() {
                                 <div className={styles.addViewText}>
                                   <div className={styles.addViewTitle}>Workload</div>
                                   <div className={styles.addViewSub}>Manage team capacity</div>
+                                </div>
+                              </div>
+                              <div className={styles.addViewItem} onClick={() => { setActiveView('team'); setPinnedViews(prev => prev.includes('team') ? prev : [...prev, 'team']); setIsAddViewDropdownOpen(false); }}>
+                                <div className={styles.addViewIcon} style={{ background: '#f5f3ff', color: '#8b5cf6' }}>
+                                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
+                                </div>
+                                <div className={styles.addViewText}>
+                                  <div className={styles.addViewTitle}>Team</div>
+                                  <div className={styles.addViewSub}>Visualize team workload & stats</div>
                                 </div>
                               </div>
                               <div className={styles.addViewItem} onClick={() => { setActiveView('archived'); setPinnedViews(prev => prev.includes('archived') ? prev : [...prev, 'archived']); setIsAddViewDropdownOpen(false); }}>
@@ -1689,6 +1719,89 @@ export default function SpacesPage() {
                       ))}
                     </div>
                   </div>
+                </div>
+              </div>
+            )}
+
+            {activeItem && activeView === 'team' && (
+              <div className={styles.teamContainer}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '20px' }}>
+                  {(() => {
+                    const members = Array.from(new Set(currentTasks.map(t => t.assignee || 'Unassigned')));
+                    const sortedMembers = members.sort((a, b) => {
+                      if (a === 'Unassigned') return -1;
+                      if (b === 'Unassigned') return 1;
+                      return a.localeCompare(b);
+                    });
+
+                    return sortedMembers.map(member => {
+                      const memberTasks = currentTasks.filter(t => (t.assignee || 'Unassigned') === member);
+                      const done = memberTasks.filter(t => t.status === 'COMPLETE').length;
+                      const notDone = memberTasks.length - done;
+                      const progress = memberTasks.length > 0 ? (done / memberTasks.length) * 100 : 0;
+
+                      return (
+                        <div key={member} className={styles.memberCard}>
+                          <div className={styles.memberHeader}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                              <div className={styles.memberAvatar} style={{
+                                background: member === 'Unassigned' ? '#f1f5f9' : `hsl(${member.length * 40 % 360}, 70%, 90%)`,
+                                color: member === 'Unassigned' ? '#64748b' : `hsl(${member.length * 40 % 360}, 70%, 40%)`
+                              }}>
+                                {member === 'Unassigned' ? '?' : member.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+                              </div>
+                              <div style={{ fontSize: '16px', fontWeight: 700, color: '#0f172a' }}>{member === 'Unassigned' ? 'Unassigned' : member}</div>
+                            </div>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                              <button className={styles.memberActionBtn}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg></button>
+                              <button className={styles.memberActionBtn}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="18 15 12 9 6 15" /></svg></button>
+                            </div>
+                          </div>
+
+                          <div className={styles.memberBody}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                              <div style={{ display: 'flex', gap: '24px' }}>
+                                <div>
+                                  <div style={{ fontSize: '24px', fontWeight: 700, color: '#0f172a' }}>{notDone}</div>
+                                  <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Not done</div>
+                                </div>
+                                <div>
+                                  <div style={{ fontSize: '24px', fontWeight: 700, color: '#0f172a' }}>{done}</div>
+                                  <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Done</div>
+                                </div>
+                              </div>
+                              <div style={{ position: 'relative', width: '56px', height: '56px' }}>
+                                <svg width="56" height="56" viewBox="0 0 36 36">
+                                  <circle cx="18" cy="18" r="16" fill="none" stroke="#f1f5f9" strokeWidth="3" />
+                                  <circle cx="18" cy="18" r="16" fill="none" stroke={progress === 100 ? '#10b981' : '#2563eb'} strokeWidth="3" strokeDasharray={`${progress} 100`} transform="rotate(-90 18 18)" strokeLinecap="round" />
+                                </svg>
+                                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 700, color: '#0f172a' }}>
+                                  {Math.round(progress)}%
+                                </div>
+                              </div>
+                            </div>
+
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                              {statuses.filter(s => s !== 'COMPLETE').map(status => {
+                                const statusTasks = memberTasks.filter(t => t.status === status);
+                                if (statusTasks.length === 0) return null;
+                                return (
+                                  <div key={status} className={styles.memberStatusRow}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: '#94a3b8' }}><path d="m9 18 6-6-6-6" /></svg>
+                                      <div style={{ width: '8px', height: '8px', borderRadius: '2px', background: getStatusStyles(status).color }}></div>
+                                      <span style={{ fontSize: '12px', fontWeight: 600, color: '#475569' }}>{status}</span>
+                                      <span style={{ fontSize: '12px', color: '#94a3b8' }}>({statusTasks.length})</span>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    });
+                  })()}
                 </div>
               </div>
             )}

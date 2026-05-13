@@ -40,10 +40,10 @@ export async function PATCH(req: NextRequest) {
   if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
-    const { id, ...updates } = await req.json();
+    const { id, type, ...updates } = await req.json();
 
     // 1. Fetch current state for logging
-    const { data: currentTask } = await supabase.from('project_tasks').select('id, status, is_archived').eq('id', id).single();
+    const { data: currentTask } = await supabase.from('project_tasks').select('*').eq('id', id).single();
 
     // 2. Perform update
     const { data, error } = await supabase.from('project_tasks').update(updates).eq('id', id).select().single();
@@ -52,15 +52,20 @@ export async function PATCH(req: NextRequest) {
     // 3. Log changes if applicable
     if (currentTask) {
       const logs = [];
-      if (updates.status && currentTask.status !== updates.status) {
-        logs.push({
-          task_id: id,
-          action_type: 'status_change',
-          previous_value: currentTask.status,
-          new_value: updates.status,
-          user_type: 'admin'
-        });
-      }
+      const fieldsToLog = ['status', 'title', 'description', 'assignee', 'due_date', 'priority'];
+      
+      fieldsToLog.forEach(field => {
+        if (updates[field] !== undefined && currentTask[field] !== updates[field]) {
+          logs.push({
+            task_id: id,
+            action_type: field === 'status' ? 'status_change' : `${field}_change`,
+            previous_value: String(currentTask[field] || ''),
+            new_value: String(updates[field] || ''),
+            user_type: 'admin'
+          });
+        }
+      });
+
       if (updates.is_archived !== undefined && currentTask.is_archived !== updates.is_archived) {
         logs.push({
           task_id: id,
