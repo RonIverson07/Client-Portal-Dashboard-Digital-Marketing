@@ -86,6 +86,9 @@ export default function SpacesPage() {
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
   const [workloadRange, setWorkloadRange] = useState(14);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
+  const [tableAssigneeFilter, setTableAssigneeFilter] = useState<string>('All');
+  const [tableStatusFilter, setTableStatusFilter] = useState<string>('All');
+  const [tablePriorityFilter, setTablePriorityFilter] = useState<string>('All');
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
@@ -1554,20 +1557,55 @@ export default function SpacesPage() {
             )}
 
             {activeItem && activeView === 'table' && (
-              <div className={styles.tableViewContainer}>
-                <table className={styles.taskTable}>
-                  <thead>
-                    <tr>
-                      <th style={{ width: '40px' }}>#</th>
-                      <th>Name</th>
-                      <th>Assignee</th>
-                      <th>Status</th>
-                      <th>Due Date</th>
-                      <th>Priority</th>
-                    </tr>
-                  </thead>
+              <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                <div style={{ display: 'flex', gap: '12px', padding: '0 0 16px 0' }}>
+                  <select 
+                    value={tableAssigneeFilter} 
+                    onChange={e => setTableAssigneeFilter(e.target.value)} 
+                    style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '13px', outline: 'none', background: '#fff', cursor: 'pointer', color: '#1e293b' }}
+                  >
+                    <option value="All">All Assignees</option>
+                    {Array.from(new Set(tasks.map(t => formatAssignee(t.assignee)))).map(a => <option key={a} value={a}>{a}</option>)}
+                  </select>
+                  
+                  <select 
+                    value={tableStatusFilter} 
+                    onChange={e => setTableStatusFilter(e.target.value)} 
+                    style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '13px', outline: 'none', background: '#fff', cursor: 'pointer', color: '#1e293b' }}
+                  >
+                    <option value="All">All Statuses</option>
+                    {statuses.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+
+                  <select 
+                    value={tablePriorityFilter} 
+                    onChange={e => setTablePriorityFilter(e.target.value)} 
+                    style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '13px', outline: 'none', background: '#fff', cursor: 'pointer', color: '#1e293b' }}
+                  >
+                    <option value="All">All Priorities</option>
+                    {PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
+                  </select>
+                </div>
+
+                <div className={styles.tableViewContainer}>
+                  <table className={styles.taskTable}>
+                    <thead>
+                      <tr>
+                        <th style={{ width: '40px' }}>#</th>
+                        <th>Name</th>
+                        <th>Assignee</th>
+                        <th>Status</th>
+                        <th>Due Date</th>
+                        <th>Priority</th>
+                      </tr>
+                    </thead>
                   <tbody>
-                    {currentTasks.map((task, index) => (
+                    {currentTasks.filter(task => {
+                      if (tableAssigneeFilter !== 'All' && formatAssignee(task.assignee) !== tableAssigneeFilter) return false;
+                      if (tableStatusFilter !== 'All' && task.status !== tableStatusFilter) return false;
+                      if (tablePriorityFilter !== 'All' && (task.priority || 'Normal') !== tablePriorityFilter) return false;
+                      return true;
+                    }).map((task, index) => (
                       <tr key={task.id}>
                         <td style={{ color: '#94a3b8', fontSize: '11px' }}>{index + 1}</td>
                         <td>
@@ -1607,6 +1645,7 @@ export default function SpacesPage() {
                   </tbody>
                 </table>
               </div>
+            </div>
             )}
 
             {activeItem && activeView === 'dashboard' && (
