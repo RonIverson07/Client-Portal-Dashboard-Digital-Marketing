@@ -19,6 +19,7 @@ interface SpaceTask {
   description?: string;
   reminder_at?: string;
   is_archived?: boolean;
+  is_favorite?: boolean;
 }
 
 interface ActivityLog {
@@ -46,6 +47,12 @@ const getStatusStyles = (status: string) => {
   if (normalized.includes('COMPLETE') || normalized.includes('DONE')) return { color: '#10b981', bg: '#ecfdf5' };
   if (normalized.includes('CANCEL')) return { color: '#ef4444', bg: '#fef2f2' };
   return { color: '#64748b', bg: '#f1f5f9' };
+};
+
+const formatAssignee = (name: string | undefined) => {
+  if (!name) return 'Unassigned';
+  if (name === 'Onboarding Assistant') return 'Assistant';
+  return name;
 };
 
 export default function SpacesPage() {
@@ -178,7 +185,7 @@ export default function SpacesPage() {
 
         setSpaces(hierarchy.spaces || []);
         setActivityLogs(logsData.logs || []);
-        
+
         // Map snake_case to camelCase
         const mappedFolders = (hierarchy.folders || []).map((f: any) => ({
           ...f,
@@ -303,7 +310,7 @@ export default function SpacesPage() {
       if (type === 'Move' && targetId && targetType && moveTargetId) {
         const url = targetType === 'task' ? '/api/admin/project-tasks' : '/api/admin/spaces';
         const body: any = { id: targetId };
-        
+
         if (targetType === 'task') {
           const statuses = ['TO DO', 'PLANNING', 'IN PROGRESS', 'AT RISK', 'UPDATE REQUIRED', 'COMPLETE'];
           if (statuses.includes(moveTargetId)) {
@@ -446,9 +453,32 @@ export default function SpacesPage() {
     }
   };
 
+  const toggleFavorite = async (taskId: string) => {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+
+    const newValue = !task.is_favorite;
+    
+    // Update local state
+    setTasks(tasks.map(t => t.id === taskId ? { ...t, is_favorite: newValue } : t));
+
+    try {
+      const res = await fetch('/api/admin/project-tasks', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: taskId, is_favorite: newValue })
+      });
+      if (!res.ok) throw new Error('Failed');
+      showToast(newValue ? 'Added to favorites' : 'Removed from favorites');
+    } catch (e) {
+      setTasks(tasks.map(t => t.id === taskId ? { ...t, is_favorite: !newValue } : t));
+      showToast('Failed to update favorite', 'error');
+    }
+  };
+
   const performDelete = (type: 'space' | 'folder' | 'list' | 'statusGroup' | 'task', idOrIds: string) => {
     const ids = idOrIds.split(',');
-    
+
     if (type === 'space') {
       const id = ids[0];
       setSpaces(spaces.filter(s => s.id !== id));
@@ -575,15 +605,15 @@ export default function SpacesPage() {
 
   const setTaskReminder = async (taskId: string, date: Date | null) => {
     const reminderAt = date ? date.toISOString() : null;
-    
+
     // Support bulk updates if the target task is part of a selection
-    const idsToUpdate = (selectedTaskIds.has(taskId) && selectedTaskIds.size > 1) 
-      ? Array.from(selectedTaskIds) 
+    const idsToUpdate = (selectedTaskIds.has(taskId) && selectedTaskIds.size > 1)
+      ? Array.from(selectedTaskIds)
       : [taskId];
 
     console.log(`Setting reminder for tasks:`, idsToUpdate, `Date:`, reminderAt);
 
-    const results = await Promise.all(idsToUpdate.map(id => 
+    const results = await Promise.all(idsToUpdate.map(id =>
       fetch('/api/admin/project-tasks', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -592,18 +622,18 @@ export default function SpacesPage() {
     ));
 
     const allOk = results.every(res => res.ok);
-    
+
     if (allOk) {
       // Update local state for all updated tasks
       setTasks(prev => prev.map(t => idsToUpdate.includes(t.id) ? { ...t, reminder_at: reminderAt || undefined } : t));
-      
-      const msg = idsToUpdate.length > 1 
-        ? `Reminders set for ${idsToUpdate.length} tasks!` 
+
+      const msg = idsToUpdate.length > 1
+        ? `Reminders set for ${idsToUpdate.length} tasks!`
         : 'Reminder set successfully!';
-      
+
       console.log(`Bulk update success: ${msg}`);
       showToast(msg);
-      
+
       if (idsToUpdate.length > 1) clearSelection();
     } else {
       console.error('Failed to set some reminders', results);
@@ -628,7 +658,7 @@ export default function SpacesPage() {
 
   const archiveTasks = async (targetId: string, isGroup: boolean = false) => {
     let idsToArchive: string[] = [];
-    
+
     if (isGroup) {
       // Archive all tasks in the status group (targetId is the status name)
       idsToArchive = currentTasks.filter(t => t.status === targetId && !t.is_archived).map(t => t.id);
@@ -711,6 +741,12 @@ export default function SpacesPage() {
       currentTasks = tasks.filter(t => spaceLists.includes(t.listId) && (activeView === 'archived' ? t.is_archived : !t.is_archived));
     }
   }
+
+  // Sort: Favorites first
+  currentTasks.sort((a, b) => {
+    if (!!a.is_favorite === !!b.is_favorite) return 0;
+    return a.is_favorite ? -1 : 1;
+  });
 
   // Icons
   const IconSpace = ({ color = '#10b981' }: { color?: string }) => <svg width="12" height="12" viewBox="0 0 24 24" fill={color} style={{ borderRadius: '2px' }}><rect width="24" height="24" rx="4" /></svg>;
@@ -1045,16 +1081,6 @@ export default function SpacesPage() {
                       )}
                     </div>
 
-                    {selectedTaskIds.size > 0 && (
-                      <button
-                        className={styles.pillBtn}
-                        style={{ marginLeft: '12px', color: '#ef4444', borderColor: '#fecaca', background: '#fef2f2' }}
-                        onClick={clearSelection}
-                      >
-                        Clear Selection ({selectedTaskIds.size})
-                      </button>
-                    )}
-
                     {/* Add Task button */}
                     <button
                       className="btn btn-primary btn-sm"
@@ -1114,28 +1140,25 @@ export default function SpacesPage() {
                       {colTasks.map(task => (
                         <div
                           key={task.id}
-                          className={`${styles.taskCard} ${selectedTaskIds.has(task.id) ? styles.taskCardSelected : ''}`}
+                          className={styles.taskCard}
                           draggable
                           onDragStart={(e) => handleDragStart(e, task.id)}
                           onContextMenu={(e) => handleContextMenu(e, 'task', task.id)}
-                          onClick={() => {
-                            setSelectedTaskIds(prev => {
-                              const next = new Set(prev);
-                              if (next.has(task.id)) next.delete(task.id);
-                              else next.add(task.id);
-                              return next;
-                            });
-                          }}
                         >
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                            <div style={{ fontSize: '14px', fontWeight: 500, color: '#1e293b' }}>{task.title}</div>
+                            <div style={{ fontSize: '14px', fontWeight: 500, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                               {task.title}
+                               {task.is_favorite && (
+                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="#f59e0b"><path d="M12 2L15 8L22 9L17 14L18 21L12 17L6 21L7 14L2 9L9 8L12 2Z" /></svg>
+                               )}
+                             </div>
                             <button className={styles.addBtn} style={{ padding: '0 4px', fontSize: '16px', marginTop: '-4px' }} onClick={(e) => { e.stopPropagation(); handleContextMenu(e, 'task', task.id); }}>⋯</button>
                           </div>
 
                           <div className={styles.cardFooter}>
                             <div className={styles.cardFooterIcon} title="Assignee" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
-                              <span style={{ fontSize: '11px', color: '#64748b' }}>{task.assignee || 'Unassigned'}</span>
+                              <span style={{ fontSize: '11px', color: '#64748b' }}>{formatAssignee(task.assignee)}</span>
                             </div>
 
                             {task.dueDate && (
@@ -1205,26 +1228,22 @@ export default function SpacesPage() {
                       </div>
 
                       {colTasks.map(task => (
-                        <div key={task.id} className={`${styles.listRow} ${selectedTaskIds.has(task.id) ? styles.listRowSelected : ''}`} onClick={() => {
-                          setSelectedTaskIds(prev => {
-                            const next = new Set(prev);
-                            if (next.has(task.id)) next.delete(task.id);
-                            else next.add(task.id);
-                            return next;
-                          });
-                        }}>
+                        <div key={task.id} className={styles.listRow}>
                           <div className={styles.taskNameCell} onClick={(e) => { e.stopPropagation(); openModal('Rename', task.id, 'task', task.title, task); }}>
                             <div className={styles.statusIconCircle} style={{ borderColor: statusColor }} onClick={(e) => { e.stopPropagation(); handleContextMenu(e, 'statusGroup', status); }}>
                               {status === 'COMPLETE' && <svg width="8" height="8" viewBox="0 0 24 24" fill={statusColor}><path d="M20.285 2l-11.285 11.567-5.286-5.011-3.714 3.716 9 8.728 15-15.285z" /></svg>}
                             </div>
-                            <span style={{ color: status === 'COMPLETE' ? '#94a3b8' : 'inherit', textDecoration: status === 'COMPLETE' ? 'line-through' : 'none' }}>
-                              {task.title}
-                            </span>
+                            <span style={{ color: status === 'COMPLETE' ? '#94a3b8' : 'inherit', textDecoration: status === 'COMPLETE' ? 'line-through' : 'none', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                               {task.title}
+                               {task.is_favorite && (
+                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="#f59e0b"><path d="M12 2L15 8L22 9L17 14L18 21L12 17L6 21L7 14L2 9L9 8L12 2Z" /></svg>
+                               )}
+                             </span>
                           </div>
 
                           <div className={styles.cellIcon} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={(e) => { e.stopPropagation(); openModal('Rename', task.id, 'task', task.title, task); }}>
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
-                            <span style={{ fontSize: '13px', color: '#64748b' }}>{task.assignee || 'Unassigned'}</span>
+                            <span style={{ fontSize: '13px', color: '#64748b' }}>{formatAssignee(task.assignee)}</span>
                           </div>
 
                           <div className={styles.cellIcon} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); openModal('Rename', task.id, 'task', task.title, task); }}>
@@ -1559,8 +1578,10 @@ export default function SpacesPage() {
                         </td>
                         <td>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: 600 }}>{task.assignee ? task.assignee[0] : '?'}</div>
-                            <span style={{ fontSize: '12px' }}>{task.assignee || 'Unassigned'}</span>
+                            <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: 600 }}>
+                              {task.assignee ? formatAssignee(task.assignee)[0] : '?'}
+                            </div>
+                            <span style={{ fontSize: '12px' }}>{formatAssignee(task.assignee)}</span>
                           </div>
                         </td>
                         <td>
@@ -1650,7 +1671,7 @@ export default function SpacesPage() {
                       {(() => {
                         const assigneeMap: Record<string, number> = {};
                         currentTasks.filter(t => t.status !== 'COMPLETE').forEach(t => {
-                          const name = t.assignee || 'Unassigned';
+                          const name = formatAssignee(t.assignee);
                           assigneeMap[name] = (assigneeMap[name] || 0) + 1;
                         });
                         const entries = Object.entries(assigneeMap).slice(0, 5);
@@ -1706,11 +1727,11 @@ export default function SpacesPage() {
                       {currentTasks.slice(0, 5).map((task, i) => (
                         <div key={task.id} className={styles.dashboardListItem}>
                           <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: 700, color: '#64748b' }}>
-                            {task.assignee ? task.assignee[0] : 'U'}
+                            {task.assignee ? formatAssignee(task.assignee)[0] : 'U'}
                           </div>
                           <div style={{ flex: 1 }}>
                             <div style={{ fontSize: '12px', color: '#475569' }}>
-                              <span style={{ fontWeight: 700, color: '#0f172a' }}>{task.assignee || 'Someone'}</span> updated task
+                              <span style={{ fontWeight: 700, color: '#0f172a' }}>{formatAssignee(task.assignee) || 'Someone'}</span> updated task
                               <span style={{ fontWeight: 600, color: '#3b82f6' }}> {task.title}</span>
                             </div>
                             <div style={{ fontSize: '10px', color: '#94a3b8', marginTop: '2px' }}>{i + 1}h ago</div>
@@ -1727,7 +1748,7 @@ export default function SpacesPage() {
               <div className={styles.teamContainer}>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '20px' }}>
                   {(() => {
-                    const members = Array.from(new Set(currentTasks.map(t => t.assignee || 'Unassigned')));
+                    const members = Array.from(new Set(currentTasks.map(t => formatAssignee(t.assignee))));
                     const sortedMembers = members.sort((a, b) => {
                       if (a === 'Unassigned') return -1;
                       if (b === 'Unassigned') return 1;
@@ -1735,7 +1756,7 @@ export default function SpacesPage() {
                     });
 
                     return sortedMembers.map(member => {
-                      const memberTasks = currentTasks.filter(t => (t.assignee || 'Unassigned') === member);
+                      const memberTasks = currentTasks.filter(t => formatAssignee(t.assignee) === member);
                       const done = memberTasks.filter(t => t.status === 'COMPLETE').length;
                       const notDone = memberTasks.length - done;
                       const progress = memberTasks.length > 0 ? (done / memberTasks.length) * 100 : 0;
@@ -1750,7 +1771,7 @@ export default function SpacesPage() {
                               }}>
                                 {member === 'Unassigned' ? '?' : member.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
                               </div>
-                              <div style={{ fontSize: '16px', fontWeight: 700, color: '#0f172a' }}>{member === 'Unassigned' ? 'Unassigned' : member}</div>
+                              <div style={{ fontSize: '16px', fontWeight: 700, color: '#0f172a' }}>{member}</div>
                             </div>
                             <div style={{ display: 'flex', gap: '8px' }}>
                               <button className={styles.memberActionBtn}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg></button>
@@ -1868,7 +1889,7 @@ export default function SpacesPage() {
                               </div>
                               <div style={{ fontSize: '11px', color: '#64748b', marginLeft: '16px', marginTop: '2px' }}>{listName}</div>
                             </div>
-                            
+
                             <div style={{ padding: '8px 0' }}>
                               {logs.map(log => (
                                 <div key={log.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 16px', transition: 'background 0.2s ease' }} className={styles.activityLogRow}>
@@ -1939,11 +1960,11 @@ export default function SpacesPage() {
 
                   {/* Assignee Rows */}
                   {(() => {
-                    const assignees = Array.from(new Set(currentTasks.map(t => t.assignee || 'Unassigned')));
+                    const assignees = Array.from(new Set(currentTasks.map(t => formatAssignee(t.assignee))));
                     if (assignees.length === 0) assignees.push('You', 'Unassigned');
 
                     return assignees.map(assignee => {
-                      const assigneeTasks = currentTasks.filter(t => (t.assignee || 'Unassigned') === assignee && t.dueDate && t.status !== 'COMPLETE');
+                      const assigneeTasks = currentTasks.filter(t => formatAssignee(t.assignee) === assignee && t.dueDate && t.status !== 'COMPLETE');
                       const totalHours = assigneeTasks.length * 2; // Assuming 2h per task as a baseline
 
                       return (
@@ -2049,8 +2070,8 @@ export default function SpacesPage() {
                             <div style={{ fontSize: '15px', fontWeight: 600, color: '#1e293b', marginBottom: '4px' }}>{task.title}</div>
                           </div>
                           <div className={styles.archivedItemActions}>
-                            <button 
-                              className={styles.restoreBtn} 
+                            <button
+                              className={styles.restoreBtn}
                               onClick={() => unarchiveTask(task.id)}
                             >
                               Restore Task
@@ -2178,7 +2199,7 @@ export default function SpacesPage() {
                         >
                           <option value="">Assignee</option>
                           <option value="Me">Me</option>
-                          <option value="Onboarding Assistant">Assistant</option>
+                          <option value="Assistant">Assistant</option>
                         </select>
                       </div>
 
@@ -2292,9 +2313,9 @@ export default function SpacesPage() {
             </>
           ) : contextMenu.type === 'task' ? (
             <>
-              <div className={styles.contextMenuItem} onMouseEnter={() => setActiveSubMenu(null)} onClick={() => { closeContextMenu(); }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>
-                Favorite
+              <div className={styles.contextMenuItem} onMouseEnter={() => setActiveSubMenu(null)} onClick={() => { toggleFavorite(contextMenu.id); closeContextMenu(); }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill={tasks.find(t => t.id === contextMenu.id)?.is_favorite ? "#f59e0b" : "none"} stroke={tasks.find(t => t.id === contextMenu.id)?.is_favorite ? "#f59e0b" : "currentColor"} strokeWidth="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>
+                {tasks.find(t => t.id === contextMenu.id)?.is_favorite ? 'Remove from favorites' : 'Favorite'}
               </div>
               <div className={styles.contextMenuItem} onMouseEnter={() => setActiveSubMenu(null)} onClick={() => { closeContextMenu(); }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" /></svg>
