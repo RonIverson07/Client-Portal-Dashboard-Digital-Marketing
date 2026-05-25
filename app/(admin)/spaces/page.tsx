@@ -916,17 +916,8 @@ export default function SpacesPage() {
                   }));
 
                   const followedTaskIdsInView = tasks.filter(t => followedTaskIds.includes(t.id)).map(t => t.id);
-                  const latestLogMap = new Map<string, ActivityLog>();
-                  activityLogs.forEach(log => {
-                    if (followedTaskIdsInView.includes(log.task_id)) {
-                      if (!latestLogMap.has(log.task_id)) {
-                        latestLogMap.set(log.task_id, log);
-                      }
-                    }
-                  });
-
-                  const followedActivityLogs = Array.from(latestLogMap.values()).filter(log => 
-                    !dismissedActivityIds.includes(log.id)
+                  const followedActivityLogs = activityLogs.filter(log =>
+                    followedTaskIdsInView.includes(log.task_id) && !dismissedActivityIds.includes(log.id)
                   );
 
                   const dropdownActivityItems = followedActivityLogs.map(log => {
@@ -2166,17 +2157,8 @@ export default function SpacesPage() {
                     }));
 
                     const followedTaskIdsInView = currentTasks.filter(t => followedTaskIds.includes(t.id)).map(t => t.id);
-                    const latestLogMap = new Map<string, ActivityLog>();
-                    activityLogs.forEach(log => {
-                      if (followedTaskIdsInView.includes(log.task_id)) {
-                        if (!latestLogMap.has(log.task_id)) {
-                          latestLogMap.set(log.task_id, log);
-                        }
-                      }
-                    });
-
-                    const followedActivityLogs = Array.from(latestLogMap.values()).filter(log => 
-                      !dismissedActivityIds.includes(log.id)
+                    const followedActivityLogs = activityLogs.filter(log =>
+                      followedTaskIdsInView.includes(log.task_id) && !dismissedActivityIds.includes(log.id)
                     );
 
                     const activityItems = followedActivityLogs.map(log => {
