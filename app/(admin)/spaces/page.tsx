@@ -4,6 +4,12 @@ import { useState, useEffect, useRef } from 'react';
 import styles from './spaces.module.css';
 import { SpaceMindMapView } from '@/components/spaces/SpaceMindMapView';
 import { loadMindMapParents, saveMindMapParent, isMindMapBranchTask } from '@/lib/mindMapParents';
+import {
+  distributeTaskHours,
+  formatWorkloadHours,
+  sumHoursInRange,
+  toDateKey,
+} from '@/lib/workloadUtils';
 
 type SpaceView = 'board' | 'list' | 'calendar' | 'gantt' | 'table' | 'dashboard' | 'activity' | 'workload' | 'inbox' | 'archived' | 'team' | 'mindmap';
 
@@ -31,6 +37,7 @@ interface SpaceTask {
   is_favorite?: boolean;
   parentTaskId?: string | null;
   is_mind_map_step?: boolean;
+  timeEstimateHours?: number | null;
 }
 
 interface ActivityLog {
@@ -212,6 +219,12 @@ export default function SpacesPage() {
       listId: t.list_id || t.listId,
       dueDate: t.due_date || t.dueDate,
       startDate: t.start_date || t.startDate,
+      timeEstimateHours:
+        t.time_estimate_hours != null
+          ? Number(t.time_estimate_hours)
+          : t.timeEstimateHours != null
+            ? Number(t.timeEstimateHours)
+            : null,
       is_archived: t.is_archived || false,
       parentTaskId,
       is_mind_map_step: !!(t.is_mind_map_step || parentTaskId || parentLinks[t.id]),
@@ -341,6 +354,7 @@ export default function SpacesPage() {
     assignee: string;
     dueDate: string;
     startDate: string;
+    timeEstimate: string;
     priority: 'Urgent' | 'High' | 'Normal' | 'Low' | 'Clear';
   }>({
     isOpen: false,
@@ -350,6 +364,7 @@ export default function SpacesPage() {
     assignee: '',
     dueDate: '',
     startDate: '',
+    timeEstimate: '',
     priority: 'Normal',
   });
 
@@ -365,6 +380,12 @@ export default function SpacesPage() {
       assignee: initialData.assignee || '',
       dueDate: formatDateForInput(initialData.dueDate),
       startDate: formatDateForInput(initialData.startDate),
+      timeEstimate: (() => {
+        const raw = initialData.timeEstimateHours ?? initialData.time_estimate_hours;
+        if (raw === null || raw === undefined || raw === '') return '';
+        const num = Number(raw);
+        return Number.isFinite(num) ? String(num) : '';
+      })(),
       priority: initialData.priority || 'Normal',
     });
   };
@@ -458,7 +479,12 @@ export default function SpacesPage() {
 
   const handleModalSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const { type, targetId, targetType, inputValue, moveTargetId, description, assignee, dueDate, startDate, priority } = modalConfig;
+    const { type, targetId, targetType, inputValue, moveTargetId, description, assignee, dueDate, startDate, timeEstimate, priority } = modalConfig;
+    const parsedTimeEstimate = timeEstimate.trim() ? parseFloat(timeEstimate) : null;
+    const timeEstimateHours =
+      parsedTimeEstimate != null && !isNaN(parsedTimeEstimate) && parsedTimeEstimate > 0
+        ? parsedTimeEstimate
+        : null;
 
     try {
       if (type === 'Delete' && targetId && targetType) {
@@ -576,6 +602,7 @@ export default function SpacesPage() {
 
         const res = await fetch('/api/admin/project-tasks', {
           method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             list_id: actualListId,
             title: inputValue,
@@ -584,15 +611,28 @@ export default function SpacesPage() {
             assignee,
             due_date: dueDate || null,
             start_date: startDate || null,
+            time_estimate_hours: timeEstimateHours,
             priority
           })
         });
         if (res.ok) {
           const newItem = await res.json();
-          setTasks([...tasks, { ...newItem, listId: newItem.list_id, dueDate: newItem.due_date, startDate: newItem.start_date }]);
+          const mapped = mapTask(newItem);
+          setTasks([...tasks, { ...mapped, timeEstimateHours: mapped.timeEstimateHours ?? timeEstimateHours }]);
           showToast('Task created successfully');
           fetchLogs();
+          closeModal();
+        } else {
+          const err = await res.json().catch(() => ({}));
+          const msg = String(err.error || 'Failed to create task');
+          showToast(
+            msg.includes('time_estimate_hours')
+              ? 'Add time_estimate_hours column in Supabase (see time_estimate_hours.sql), then try again.'
+              : msg,
+            'error'
+          );
         }
+        return;
       } else if (type === 'Rename' && targetId && targetType) {
         const url = targetType === 'task' ? '/api/admin/project-tasks' : '/api/admin/spaces';
         const body: any = { id: targetId };
@@ -602,6 +642,7 @@ export default function SpacesPage() {
           body.assignee = assignee;
           body.due_date = dueDate || null;
           body.start_date = startDate || null;
+          body.time_estimate_hours = timeEstimateHours;
           body.priority = priority;
         } else {
           body.type = targetType;
@@ -609,6 +650,7 @@ export default function SpacesPage() {
         }
         const res = await fetch(url, {
           method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body)
         });
         if (res.ok) {
@@ -623,12 +665,28 @@ export default function SpacesPage() {
             setLists(lists.map(l => l.id === targetId ? { ...updated, parentId: updated.parent_id } : l));
             showToast('List renamed successfully');
           } else if (targetType === 'task') {
-            setTasks(tasks.map(t => t.id === targetId ? { ...updated, listId: updated.list_id, dueDate: updated.due_date, startDate: updated.start_date } : t));
+            setTasks(tasks.map(t => {
+              if (t.id !== targetId) return t;
+              const mapped = mapTask(updated);
+              return { ...mapped, timeEstimateHours: mapped.timeEstimateHours ?? timeEstimateHours };
+            }));
             showToast('Task updated successfully');
             fetchLogs();
           }
+          closeModal();
+        } else {
+          const err = await res.json().catch(() => ({}));
+          const msg = String(err.error || 'Failed to update task');
+          showToast(
+            msg.includes('time_estimate_hours')
+              ? 'Add time_estimate_hours column in Supabase (see time_estimate_hours.sql), then try again.'
+              : msg,
+            'error'
+          );
         }
+        return;
       }
+
       closeModal();
     } catch (e) {
       console.error('Modal submit error:', e);
@@ -730,12 +788,13 @@ export default function SpacesPage() {
           assignee: task.assignee || '',
           due_date: task.dueDate || null,
           start_date: task.startDate || null,
+          time_estimate_hours: task.timeEstimateHours ?? null,
           priority: task.priority || 'Normal'
         })
       });
       if (res.ok) {
         const newItem = await res.json();
-        setTasks(prev => [...prev, { ...newItem, listId: newItem.list_id, dueDate: newItem.due_date, startDate: newItem.start_date }]);
+        setTasks(prev => [...prev, mapTask(newItem)]);
         fetchLogs();
       }
     } catch (e) { console.error(e); }
@@ -2315,12 +2374,25 @@ export default function SpacesPage() {
 
                   {/* Assignee Rows */}
                   {(() => {
+                    const rangeStart = new Date();
+                    rangeStart.setHours(0, 0, 0, 0);
+
                     const assignees = Array.from(new Set(currentTasks.map(t => formatAssignee(t.assignee))));
                     if (assignees.length === 0) assignees.push('You', 'Unassigned');
 
                     return assignees.map(assignee => {
-                      const assigneeTasks = currentTasks.filter(t => formatAssignee(t.assignee) === assignee && t.dueDate && t.status !== 'COMPLETE');
-                      const totalHours = assigneeTasks.length * 2; // Assuming 2h per task as a baseline
+                      const assigneeTasks = currentTasks.filter(
+                        t => formatAssignee(t.assignee) === assignee && t.status !== 'COMPLETE'
+                      );
+                      const taskDistributions = assigneeTasks.map(t => ({
+                        task: t,
+                        dist: distributeTaskHours(t),
+                      }));
+                      const workloadTasks = taskDistributions.filter(td => Object.keys(td.dist).length > 0);
+                      const totalHours = workloadTasks.reduce(
+                        (sum, td) => sum + sumHoursInRange(td.dist, rangeStart, workloadRange),
+                        0
+                      );
 
                       return (
                         <div key={assignee} className={styles.workloadRow}>
@@ -2328,22 +2400,26 @@ export default function SpacesPage() {
                             <div className={styles.workloadAvatar}>{assignee[0]}</div>
                             <span style={{ fontWeight: 600, color: '#1e293b', fontSize: '13px', flex: 1 }}>{assignee}</span>
                             <div style={{ fontSize: '10px', color: '#64748b', background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>
-                              {totalHours}h/40h
+                              {formatWorkloadHours(totalHours)}/40h
                             </div>
                           </div>
                           {[...Array(workloadRange)].map((_, i) => {
-                            const d = new Date();
+                            const d = new Date(rangeStart);
                             d.setDate(d.getDate() + i);
-                            const dateString = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                            const dateString = toDateKey(d);
 
-                            const tasksOnDate = assigneeTasks.filter(t => t.dueDate === dateString);
-                            const hoursOnDate = tasksOnDate.length * 2;
+                            const tasksOnDate = workloadTasks.filter(
+                              td => (td.dist[dateString] ?? 0) > 0
+                            );
+                            const hoursOnDate = Math.round(
+                              tasksOnDate.reduce((sum, td) => sum + (td.dist[dateString] ?? 0), 0) * 10
+                            ) / 10;
                             const hasTask = hoursOnDate > 0;
 
                             return (
                               <div key={i} className={styles.workloadCell}>
                                 <div className={`${styles.workloadCellBox} ${hasTask ? styles.workloadCellBoxActive : ''}`}>
-                                  {hoursOnDate}h
+                                  {formatWorkloadHours(hoursOnDate)}
                                   {hasTask && <div className={styles.workloadTaskCount}>{tasksOnDate.length}</div>}
                                 </div>
                               </div>
@@ -2668,6 +2744,21 @@ export default function SpacesPage() {
                         >
                           {PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
                         </select>
+                      </div>
+
+                      <div className={styles.pillBtn}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
+                        <span style={{ fontSize: '11px', color: '#64748b', marginLeft: '4px', marginRight: '-4px' }}>Estimate:</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.5"
+                          placeholder="Hours"
+                          style={{ border: 'none', background: 'transparent', fontSize: 'inherit', outline: 'none', flex: 1, width: '60px' }}
+                          value={modalConfig.timeEstimate}
+                          onChange={e => setModalConfig({ ...modalConfig, timeEstimate: e.target.value })}
+                        />
+                        <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600 }}>h</span>
                       </div>
                     </div>
                   </div>
