@@ -151,13 +151,58 @@
   display: flex;
   gap: 16px;
   overflow-x: auto;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
+  scrollbar-width: thin;
+  scrollbar-color: #888888 #f1f5f9;
   flex: 1;
+  padding-bottom: 8px;
 }
 
+/* Custom premium scrollbar styling */
 .tabsScrollArea::-webkit-scrollbar {
-  display: none;
+  height: 6px;
+}
+
+.tabsScrollArea::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 9999px;
+}
+
+.tabsScrollArea::-webkit-scrollbar-thumb {
+  background: #888888;
+  border-radius: 9999px;
+  cursor: grab;
+}
+
+.tabsScrollArea::-webkit-scrollbar-thumb:hover {
+  background: #666666;
+}
+
+/* Native horizontal scrollbar arrows styled exactly like the provided image */
+.tabsScrollArea::-webkit-scrollbar-button:single-button {
+  background-color: transparent;
+  display: block;
+  height: 6px;
+  width: 6px;
+}
+
+.tabsScrollArea::-webkit-scrollbar-button:single-button:decrement {
+  border-style: solid;
+  border-width: 4px 6px 4px 0;
+  border-color: transparent #888888 transparent transparent;
+}
+
+.tabsScrollArea::-webkit-scrollbar-button:single-button:decrement:hover {
+  border-color: transparent #666666 transparent transparent;
+}
+
+.tabsScrollArea::-webkit-scrollbar-button:single-button:increment {
+  border-style: solid;
+  border-width: 4px 0 4px 6px;
+  border-color: transparent transparent transparent #888888;
+}
+
+.tabsScrollArea::-webkit-scrollbar-button:single-button:increment:hover {
+  border-color: transparent transparent transparent #666666;
 }
 
 .headerActions {

@@ -92,6 +92,8 @@ export default function SpacesPage() {
   const [followedTaskIds, setFollowedTaskIds] = useState<string[]>([]);
   const [dismissedActivityIds, setDismissedActivityIds] = useState<string[]>([]);
 
+  const tabsScrollRef = useRef<HTMLDivElement>(null);
+
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
@@ -1004,7 +1006,15 @@ export default function SpacesPage() {
 
             {activeItem && (
               <div className={styles.viewTabs} style={{ marginTop: 'auto', marginBottom: '-1px' }}>
-                <div className={styles.tabsScrollArea}>
+                <div 
+                  ref={tabsScrollRef}
+                  className={styles.tabsScrollArea}
+                  onWheel={(e) => {
+                    if (tabsScrollRef.current && e.deltaY !== 0) {
+                      tabsScrollRef.current.scrollLeft += e.deltaY;
+                    }
+                  }}
+                >
                   {pinnedViews.map(view => {
                     const isPinned = pinnedViewIds.includes(view);
 
@@ -2532,7 +2542,12 @@ export default function SpacesPage() {
             </>
           ) : contextMenu.type === 'task' ? (
             <>
-              <div className={styles.contextMenuItem} onMouseEnter={() => setActiveSubMenu(null)} onClick={() => { toggleFavorite(contextMenu.id); closeContextMenu(); }}>
+              <div 
+                className={styles.contextMenuItem} 
+                onMouseEnter={() => setActiveSubMenu(null)} 
+                onClick={activeView === 'inbox' ? undefined : () => { toggleFavorite(contextMenu.id); closeContextMenu(); }}
+                style={activeView === 'inbox' ? { opacity: 0.4, cursor: 'not-allowed', pointerEvents: 'none' } : {}}
+              >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill={tasks.find(t => t.id === contextMenu.id)?.is_favorite ? "#f59e0b" : "none"} stroke={tasks.find(t => t.id === contextMenu.id)?.is_favorite ? "#f59e0b" : "currentColor"} strokeWidth="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>
                 {tasks.find(t => t.id === contextMenu.id)?.is_favorite ? 'Remove from favorites' : 'Favorite'}
               </div>
@@ -2675,11 +2690,21 @@ export default function SpacesPage() {
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m9 18 6-6-6-6" /></svg>
                 Move to
               </div>
-              <div className={styles.contextMenuItem} onMouseEnter={() => setActiveSubMenu(null)} onClick={() => { duplicateTask(contextMenu.id); closeContextMenu(); }}>
+              <div 
+                className={styles.contextMenuItem} 
+                onMouseEnter={() => setActiveSubMenu(null)} 
+                onClick={activeView === 'inbox' ? undefined : () => { duplicateTask(contextMenu.id); closeContextMenu(); }}
+                style={activeView === 'inbox' ? { opacity: 0.4, cursor: 'not-allowed', pointerEvents: 'none' } : {}}
+              >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect width="14" height="14" x="8" y="8" rx="2" ry="2" /><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" /></svg>
                 Duplicate
               </div>
-              <div className={styles.contextMenuItem} onMouseEnter={() => setActiveSubMenu(null)} onClick={() => { openModal('Archive', contextMenu.id, 'task'); closeContextMenu(); }}>
+              <div 
+                className={styles.contextMenuItem} 
+                onMouseEnter={() => setActiveSubMenu(null)} 
+                onClick={activeView === 'inbox' ? undefined : () => { openModal('Archive', contextMenu.id, 'task'); closeContextMenu(); }}
+                style={activeView === 'inbox' ? { opacity: 0.4, cursor: 'not-allowed', pointerEvents: 'none' } : {}}
+              >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect width="20" height="5" x="2" y="3" rx="1" /><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" /><path d="M10 12h4" /></svg>
                 Archive
               </div>
