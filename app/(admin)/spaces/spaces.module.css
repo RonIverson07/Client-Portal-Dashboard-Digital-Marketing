@@ -4,6 +4,8 @@
   height: 100%;
   overflow: hidden;
   background: #f8fafc;
+  margin: calc(-1 * var(--space-8));
+  max-height: 100vh;
 }
 
 .content {
