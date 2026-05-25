@@ -237,7 +237,7 @@ export default function SpacesPage() {
 
     const unique = new Map(patches.map(p => [p.id, p]));
     await Promise.allSettled(
-      [...unique.values()].map(p =>
+      Array.from(unique.values()).map(p =>
         fetch('/api/admin/project-tasks', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -281,7 +281,7 @@ export default function SpacesPage() {
 
         let mappedTasks = (taskData.tasks || []).map((t: any) => mapTask(t, null, parents));
         await syncMindMapBranchesToDb(mappedTasks, parents);
-        mappedTasks = mappedTasks.map(t => {
+        mappedTasks = mappedTasks.map((t: SpaceTask) => {
           const parentTaskId = t.parentTaskId ?? parents[t.id] ?? null;
           return {
             ...t,
