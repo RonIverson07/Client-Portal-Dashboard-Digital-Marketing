@@ -2302,7 +2302,7 @@ export default function SpacesPage() {
                   <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                     {(modalConfig.type === 'Task' || (modalConfig.type === 'Rename' && modalConfig.targetType === 'task')) ? `${getItemName('list', modalConfig.targetId || '')} • ${modalConfig.type === 'Task' ? 'NEW TASK' : 'EDIT TASK'}` : ''}
                   </span>
-                  <div style={{ fontSize: '18px', fontWeight: 700 }}>
+                  <div style={{ fontSize: '22px', fontWeight: 700, color: '#0f172a', letterSpacing: '-0.02em', marginTop: '4px' }}>
                     {modalConfig.type === 'Rename' ? (modalConfig.targetType === 'task' ? 'Edit Task' : `Rename ${modalConfig.targetType}`) :
                       modalConfig.type === 'Delete' ? `Delete ${modalConfig.targetType}` :
                         modalConfig.type === 'Archive' ? (
@@ -2412,15 +2412,18 @@ export default function SpacesPage() {
                     <div className={styles.modalActionRow}>
                       <div className={styles.pillBtn}>
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
-                        <select
-                          style={{ border: 'none', background: 'transparent', fontSize: 'inherit', outline: 'none', cursor: 'pointer' }}
+                        <input
+                          list="assignee-options"
+                          placeholder="Assignee"
+                          style={{ border: 'none', background: 'transparent', fontSize: 'inherit', outline: 'none', cursor: 'text', flex: 1, colorScheme: 'light' }}
                           value={modalConfig.assignee}
                           onChange={e => setModalConfig({ ...modalConfig, assignee: e.target.value })}
-                        >
-                          <option value="">Assignee</option>
-                          <option value="Me">Me</option>
-                          <option value="Assistant">Assistant</option>
-                        </select>
+                        />
+                        <datalist id="assignee-options">
+                          {Array.from(new Set(['Me', 'Assistant', ...tasks.map(t => t.assignee).filter(Boolean)])).map(assignee => (
+                            <option key={assignee} value={assignee} />
+                          ))}
+                        </datalist>
                       </div>
 
                       <div className={styles.pillBtn}>
@@ -2428,7 +2431,7 @@ export default function SpacesPage() {
                         <span style={{ fontSize: '11px', color: '#64748b', marginLeft: '4px', marginRight: '-4px' }}>Start:</span>
                         <input
                           type="date"
-                          style={{ border: 'none', background: 'transparent', fontSize: 'inherit', outline: 'none', cursor: 'pointer' }}
+                          style={{ border: 'none', background: 'transparent', fontSize: 'inherit', outline: 'none', cursor: 'pointer', flex: 1 }}
                           value={modalConfig.startDate}
                           onChange={e => setModalConfig({ ...modalConfig, startDate: e.target.value })}
                         />
@@ -2439,7 +2442,7 @@ export default function SpacesPage() {
                         <span style={{ fontSize: '11px', color: '#64748b', marginLeft: '4px', marginRight: '-4px' }}>Due:</span>
                         <input
                           type="date"
-                          style={{ border: 'none', background: 'transparent', fontSize: 'inherit', outline: 'none', cursor: 'pointer' }}
+                          style={{ border: 'none', background: 'transparent', fontSize: 'inherit', outline: 'none', cursor: 'pointer', flex: 1 }}
                           value={modalConfig.dueDate}
                           onChange={e => setModalConfig({ ...modalConfig, dueDate: e.target.value })}
                         />
@@ -2448,7 +2451,7 @@ export default function SpacesPage() {
                       <div className={styles.pillBtn}>
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" /><line x1="4" y1="22" x2="4" y2="15" /></svg>
                         <select
-                          style={{ border: 'none', background: 'transparent', fontSize: 'inherit', outline: 'none', cursor: 'pointer' }}
+                          style={{ border: 'none', background: 'transparent', fontSize: 'inherit', outline: 'none', cursor: 'pointer', flex: 1 }}
                           value={modalConfig.priority}
                           onChange={e => setModalConfig({ ...modalConfig, priority: e.target.value as any })}
                         >
