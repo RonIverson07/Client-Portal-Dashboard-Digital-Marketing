@@ -263,7 +263,7 @@ export default function SpacesPage() {
 
   const [modalConfig, setModalConfig] = useState<{
     isOpen: boolean;
-    type: 'Space' | 'Folder' | 'List' | 'Task' | 'Rename' | 'Delete' | 'Move' | 'Color';
+    type: 'Space' | 'Folder' | 'List' | 'Task' | 'Rename' | 'Delete' | 'Move' | 'Color' | 'Archive';
     targetId?: string;
     targetType?: 'space' | 'folder' | 'list' | 'statusGroup' | 'task';
     inputValue: string;
@@ -284,7 +284,7 @@ export default function SpacesPage() {
     priority: 'Normal',
   });
 
-  const openModal = (type: 'Space' | 'Folder' | 'List' | 'Task' | 'Rename' | 'Delete' | 'Move' | 'Color', targetId?: string, targetType?: 'space' | 'folder' | 'list' | 'statusGroup' | 'task', initialValue: string = '', initialData: any = {}) => {
+  const openModal = (type: 'Space' | 'Folder' | 'List' | 'Task' | 'Rename' | 'Delete' | 'Move' | 'Color' | 'Archive', targetId?: string, targetType?: 'space' | 'folder' | 'list' | 'statusGroup' | 'task', initialValue: string = '', initialData: any = {}) => {
     setModalConfig({
       isOpen: true,
       type,
@@ -327,6 +327,13 @@ export default function SpacesPage() {
           console.error('Delete failed:', err);
           alert(`Failed to delete: ${err.error || 'Unknown error'}`);
         }
+        return;
+      }
+
+      if (type === 'Archive' && targetId) {
+        const isGroup = targetType === 'statusGroup';
+        await archiveTasks(targetId, isGroup);
+        closeModal();
         return;
       }
 
@@ -806,7 +813,7 @@ export default function SpacesPage() {
   };
 
   return (
-    <main className={styles.main} onClick={() => { setIsViewDropdownOpen(false); setIsAddViewDropdownOpen(false); setViewContextMenu(null); setContextMenu(null); }}>
+    <div className={styles.container} onClick={() => { setIsViewDropdownOpen(false); setIsAddViewDropdownOpen(false); setViewContextMenu(null); setContextMenu(null); }}>
       <div className={styles.content}>
 
         {/* Hierarchical Sidebar */}
@@ -1052,7 +1059,7 @@ export default function SpacesPage() {
                   })}
                 </div>
 
-                {activeView !== 'gantt' && activeView !== 'board' && (
+                {true && (
                   <div className={styles.headerActions}>
                     <div className={styles.addViewContainer}>
                       <button ref={addViewBtnRef} className={styles.addViewBtn} onClick={(e) => {
@@ -2068,23 +2075,21 @@ export default function SpacesPage() {
                 <div className={styles.workloadGrid}>
                   <div className={styles.workloadGridHeader}>
                     <div className={styles.workloadAssigneeCol}>Assignee</div>
-                    <div className={styles.workloadDatesScroll}>
-                      {[...Array(workloadRange)].map((_, i) => {
-                        const d = new Date();
-                        d.setDate(d.getDate() + i);
-                        const isToday = i === 0;
-                        return (
-                          <div key={i} className={styles.workloadDateCol}>
-                            <div style={{ fontSize: '10px', color: isToday ? '#2563eb' : '#94a3b8', fontWeight: isToday ? 700 : 500 }}>
-                              {['S', 'M', 'T', 'W', 'T', 'F', 'S'][d.getDay()]}
-                            </div>
-                            <div style={{ fontSize: '13px', fontWeight: isToday ? 700 : 600, color: isToday ? '#2563eb' : '#0f172a', background: isToday ? '#eff6ff' : 'transparent', width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%' }}>
-                              {d.getDate()}
-                            </div>
+                    {[...Array(workloadRange)].map((_, i) => {
+                      const d = new Date();
+                      d.setDate(d.getDate() + i);
+                      const isToday = i === 0;
+                      return (
+                        <div key={i} className={styles.workloadDateCol}>
+                          <div style={{ fontSize: '10px', color: isToday ? '#2563eb' : '#94a3b8', fontWeight: isToday ? 700 : 500 }}>
+                            {['S', 'M', 'T', 'W', 'T', 'F', 'S'][d.getDay()]}
                           </div>
-                        )
-                      })}
-                    </div>
+                          <div style={{ fontSize: '13px', fontWeight: isToday ? 700 : 600, color: isToday ? '#2563eb' : '#0f172a', background: isToday ? '#eff6ff' : 'transparent', width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%' }}>
+                            {d.getDate()}
+                          </div>
+                        </div>
+                      )
+                    })}
                   </div>
 
                   {/* Assignee Rows */}
@@ -2105,26 +2110,24 @@ export default function SpacesPage() {
                               {totalHours}h/40h
                             </div>
                           </div>
-                          <div className={styles.workloadDatesScroll}>
-                            {[...Array(workloadRange)].map((_, i) => {
-                              const d = new Date();
-                              d.setDate(d.getDate() + i);
-                              const dateString = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                          {[...Array(workloadRange)].map((_, i) => {
+                            const d = new Date();
+                            d.setDate(d.getDate() + i);
+                            const dateString = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
-                              const tasksOnDate = assigneeTasks.filter(t => t.dueDate === dateString);
-                              const hoursOnDate = tasksOnDate.length * 2;
-                              const hasTask = hoursOnDate > 0;
+                            const tasksOnDate = assigneeTasks.filter(t => t.dueDate === dateString);
+                            const hoursOnDate = tasksOnDate.length * 2;
+                            const hasTask = hoursOnDate > 0;
 
-                              return (
-                                <div key={i} className={styles.workloadCell}>
-                                  <div className={`${styles.workloadCellBox} ${hasTask ? styles.workloadCellBoxActive : ''}`}>
-                                    {hoursOnDate}h
-                                    {hasTask && <div className={styles.workloadTaskCount}>{tasksOnDate.length}</div>}
-                                  </div>
+                            return (
+                              <div key={i} className={styles.workloadCell}>
+                                <div className={`${styles.workloadCellBox} ${hasTask ? styles.workloadCellBoxActive : ''}`}>
+                                  {hoursOnDate}h
+                                  {hasTask && <div className={styles.workloadTaskCount}>{tasksOnDate.length}</div>}
                                 </div>
-                              )
-                            })}
-                          </div>
+                              </div>
+                            )
+                          })}
                         </div>
                       )
                     });
@@ -2292,10 +2295,15 @@ export default function SpacesPage() {
                   <div style={{ fontSize: '18px', fontWeight: 700 }}>
                     {modalConfig.type === 'Rename' ? (modalConfig.targetType === 'task' ? 'Edit Task' : `Rename ${modalConfig.targetType}`) :
                       modalConfig.type === 'Delete' ? `Delete ${modalConfig.targetType}` :
-                        modalConfig.type === 'Move' ? `Move ${modalConfig.targetType}` :
-                          modalConfig.type === 'Color' ? `Choose ${modalConfig.targetType} Color` :
-                            modalConfig.type === 'Task' ? 'Create New Task' :
-                              `Create a ${modalConfig.type}`}
+                        modalConfig.type === 'Archive' ? (
+                          modalConfig.targetType === 'statusGroup' ? 'Archive Status Group' :
+                            (selectedTaskIds.size > 1 && selectedTaskIds.has(modalConfig.targetId!)) ? `Archive ${selectedTaskIds.size} Selected Tasks` :
+                              'Archive Task'
+                        ) :
+                          modalConfig.type === 'Move' ? `Move ${modalConfig.targetType}` :
+                            modalConfig.type === 'Color' ? `Choose ${modalConfig.targetType} Color` :
+                              modalConfig.type === 'Task' ? 'Create New Task' :
+                                `Create a ${modalConfig.type}`}
                   </div>
                 </div>
                 <button type="button" className={styles.closeBtn} onClick={closeModal}>×</button>
@@ -2304,6 +2312,18 @@ export default function SpacesPage() {
                 {modalConfig.type === 'Delete' ? (
                   <div style={{ color: '#64748b', fontSize: '14px', lineHeight: '1.5' }}>
                     Are you sure you want to delete this {modalConfig.targetType}? This action cannot be undone and will remove all nested items.
+                  </div>
+                ) : modalConfig.type === 'Archive' ? (
+                  <div style={{ color: '#64748b', fontSize: '14px', lineHeight: '1.5' }}>
+                    {modalConfig.targetType === 'statusGroup' ? (
+                      `Are you sure you want to archive all active tasks under status "${modalConfig.targetId}"?`
+                    ) : (selectedTaskIds.size > 1 && selectedTaskIds.has(modalConfig.targetId!)) ? (
+                      `Are you sure you want to archive the ${selectedTaskIds.size} selected tasks?`
+                    ) : (
+                      `Are you sure you want to archive this task?`
+                    )}
+                    <br /><br />
+                    You can easily view and restore them at any time from the <strong>Archived</strong> view tab.
                   </div>
                 ) : modalConfig.type === 'Color' ? (
                   <div className={styles.colorPickerRow}>
@@ -2451,14 +2471,23 @@ export default function SpacesPage() {
                   <button
                     type="submit"
                     className={styles.submitBtn}
-                    style={modalConfig.type === 'Delete' ? { background: '#ef4444' } : {}}
+                    style={
+                      modalConfig.type === 'Delete' ? { background: '#ef4444' } :
+                        modalConfig.type === 'Archive' ? { background: '#2563eb' } :
+                          {}
+                    }
                   >
                     {modalConfig.type === 'Rename' ? (modalConfig.targetType === 'task' ? 'Update Task' : 'Save Changes') :
                       modalConfig.type === 'Delete' ? 'Delete Permanently' :
-                        modalConfig.type === 'Move' ? 'Move Item' :
-                          modalConfig.type === 'Color' ? 'Close' :
-                            modalConfig.type === 'Task' ? 'Create Task' :
-                              'Continue'}
+                        modalConfig.type === 'Archive' ? (
+                          modalConfig.targetType === 'statusGroup' ? 'Archive Group' :
+                            (selectedTaskIds.size > 1 && selectedTaskIds.has(modalConfig.targetId!)) ? `Archive ${selectedTaskIds.size} Tasks` :
+                              'Archive Task'
+                        ) :
+                          modalConfig.type === 'Move' ? 'Move Item' :
+                            modalConfig.type === 'Color' ? 'Close' :
+                              modalConfig.type === 'Task' ? 'Create Task' :
+                                'Continue'}
                   </button>
                 </div>
               </div>
@@ -2486,7 +2515,7 @@ export default function SpacesPage() {
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d={collapsedStatuses[contextMenu.id] ? "m15 18-6-6 6-6" : "M18 15l-6-6-6 6"} /></svg>
                 {collapsedStatuses[contextMenu.id] ? 'Expand group' : 'Collapse group'}
               </div>
-              <div className={styles.contextMenuItem} onClick={() => { archiveTasks(contextMenu.id, true); closeContextMenu(); }}>
+              <div className={styles.contextMenuItem} onClick={() => { openModal('Archive', contextMenu.id, 'statusGroup'); closeContextMenu(); }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect width="20" height="5" x="2" y="3" rx="1" /><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" /><path d="M10 12h4" /></svg>
                 Archive all in this group
               </div>
@@ -2650,7 +2679,7 @@ export default function SpacesPage() {
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect width="14" height="14" x="8" y="8" rx="2" ry="2" /><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" /></svg>
                 Duplicate
               </div>
-              <div className={styles.contextMenuItem} onMouseEnter={() => setActiveSubMenu(null)} onClick={() => { archiveTasks(contextMenu.id); closeContextMenu(); }}>
+              <div className={styles.contextMenuItem} onMouseEnter={() => setActiveSubMenu(null)} onClick={() => { openModal('Archive', contextMenu.id, 'task'); closeContextMenu(); }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect width="20" height="5" x="2" y="3" rx="1" /><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" /><path d="M10 12h4" /></svg>
                 Archive
               </div>
@@ -2748,6 +2777,6 @@ export default function SpacesPage() {
           {toast.type === 'success' ? '✓' : '✕'} {toast.message}
         </div>
       )}
-    </main>
+    </div>
   );
 }

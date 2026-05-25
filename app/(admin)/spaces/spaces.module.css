@@ -1,7 +1,7 @@
 .container {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 80px);
+  height: 100%;
   overflow: hidden;
   background: #f8fafc;
 }
@@ -117,7 +117,7 @@
   display: flex;
   flex-direction: column;
   background: white;
-  overflow: visible;
+  overflow: hidden;
   position: relative;
 }
 
@@ -129,6 +129,7 @@
   position: relative;
   z-index: 20;
   background: white;
+  flex-shrink: 0;
 }
 
 .breadcrumb {
@@ -777,8 +778,8 @@
   border: 1px solid #e2e8f0;
   display: flex;
   flex-direction: column;
-  min-height: 800px;
-  overflow: visible;
+  min-height: 600px;
+  height: 100%;
 }
 
 .calendarHeader {
@@ -1608,7 +1609,7 @@
   border: 1px solid #e2e8f0;
   border-radius: 8px;
   background: white;
-  overflow: hidden;
+  overflow: auto;
   display: flex;
   flex-direction: column;
 }
@@ -1617,6 +1618,8 @@
   display: flex;
   border-bottom: 1px solid #e2e8f0;
   background: #f8fafc;
+  width: max-content;
+  min-width: 100%;
 }
 
 .workloadAssigneeCol {
@@ -1630,6 +1633,10 @@
   align-items: center;
   gap: 12px;
   flex-shrink: 0;
+  position: sticky;
+  left: 0;
+  background: inherit;
+  z-index: 5;
 }
 
 .workloadDatesScroll {
@@ -1657,6 +1664,9 @@
 .workloadRow {
   display: flex;
   border-bottom: 1px solid #f1f5f9;
+  width: max-content;
+  min-width: 100%;
+  background: white;
 }
 
 .workloadRow:last-child {
