@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@dagrejs/dagre": "^3.0.0",
     "@supabase/supabase-js": "^2.105.3",
     "@types/bcryptjs": "^2.4.6",
     "@types/better-sqlite3": "^7.6.13",
@@ -20,7 +21,8 @@
     "next": "14.2.35",
     "nodemailer": "^8.0.7",
     "react": "^18",
-    "react-dom": "^18"
+    "react-dom": "^18",
+    "reactflow": "^11.11.4"
   },
   "devDependencies": {
     "@types/node": "^20",

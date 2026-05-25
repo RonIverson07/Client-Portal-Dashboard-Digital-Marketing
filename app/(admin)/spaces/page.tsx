@@ -2,6 +2,15 @@
 
 import { useState, useEffect, useRef } from 'react';
 import styles from './spaces.module.css';
+import { SpaceMindMapView } from '@/components/spaces/SpaceMindMapView';
+import { loadMindMapParents, saveMindMapParent, isMindMapBranchTask } from '@/lib/mindMapParents';
+
+type SpaceView = 'board' | 'list' | 'calendar' | 'gantt' | 'table' | 'dashboard' | 'activity' | 'workload' | 'inbox' | 'archived' | 'team' | 'mindmap';
+
+const getViewLabel = (view: string) => {
+  if (view === 'mindmap') return 'Mind Map';
+  return view.charAt(0).toUpperCase() + view.slice(1);
+};
 
 // Interfaces for our local structural state
 interface Space { id: string; name: string; color?: string; }
@@ -20,6 +29,8 @@ interface SpaceTask {
   reminder_at?: string;
   is_archived?: boolean;
   is_favorite?: boolean;
+  parentTaskId?: string | null;
+  is_mind_map_step?: boolean;
 }
 
 interface ActivityLog {
@@ -64,7 +75,7 @@ export default function SpacesPage() {
 
   // Selection state
   const [activeItem, setActiveItem] = useState<{ type: 'space' | 'folder' | 'list', id: string } | null>(null);
-  const [activeView, setActiveView] = useState<'board' | 'list' | 'calendar' | 'gantt' | 'table' | 'dashboard' | 'activity' | 'workload' | 'inbox' | 'archived' | 'team'>('list');
+  const [activeView, setActiveView] = useState<SpaceView>('list');
   const [pinnedViews, setPinnedViews] = useState<string[]>(['list', 'board', 'calendar', 'gantt', 'table', 'dashboard', 'activity', 'workload', 'inbox']);
   const [pinnedViewIds, setPinnedViewIds] = useState<string[]>([]);
   const [draggedView, setDraggedView] = useState<string | null>(null);
@@ -91,6 +102,7 @@ export default function SpacesPage() {
   const [tablePriorityFilter, setTablePriorityFilter] = useState<string>('All');
   const [followedTaskIds, setFollowedTaskIds] = useState<string[]>([]);
   const [dismissedActivityIds, setDismissedActivityIds] = useState<string[]>([]);
+  const [mindMapParents, setMindMapParents] = useState<Record<string, string>>({});
 
   const tabsScrollRef = useRef<HTMLDivElement>(null);
 
@@ -129,6 +141,7 @@ export default function SpacesPage() {
           console.error('Failed to load dismissed activities', e);
         }
       }
+      setMindMapParents(loadMindMapParents());
       setIsHydrated(true);
     }
   }, []);
@@ -186,16 +199,58 @@ export default function SpacesPage() {
     fetchData();
   }, []);
 
-  const mapTask = (t: any): SpaceTask => ({
-    ...t,
-    listId: t.list_id || t.listId,
-    dueDate: t.due_date || t.dueDate,
-    startDate: t.start_date || t.startDate,
-    is_archived: t.is_archived || false
-  });
+  const mapTask = (
+    t: any,
+    parentOverride?: string | null,
+    parents?: Record<string, string>
+  ): SpaceTask => {
+    const parentLinks = parents ?? mindMapParents;
+    const parentTaskId =
+      t.parent_task_id ?? t.parentTaskId ?? parentOverride ?? parentLinks[t.id] ?? null;
+    return {
+      ...t,
+      listId: t.list_id || t.listId,
+      dueDate: t.due_date || t.dueDate,
+      startDate: t.start_date || t.startDate,
+      is_archived: t.is_archived || false,
+      parentTaskId,
+      is_mind_map_step: !!(t.is_mind_map_step || parentTaskId || parentLinks[t.id]),
+    };
+  };
+
+  /** Persist local mind-map parent links to DB (no deletes). */
+  const syncMindMapBranchesToDb = async (mappedTasks: SpaceTask[], parents: Record<string, string>) => {
+    const patches: { id: string; parent_task_id: string; is_mind_map_step: boolean }[] = [];
+
+    for (const [childId, parentId] of Object.entries(parents)) {
+      const t = mappedTasks.find(x => x.id === childId);
+      if (!t) continue;
+      if (t.parentTaskId === parentId && t.is_mind_map_step) continue;
+      patches.push({ id: childId, parent_task_id: parentId, is_mind_map_step: true });
+    }
+
+    for (const t of mappedTasks) {
+      if (t.parentTaskId && !t.is_mind_map_step) {
+        patches.push({ id: t.id, parent_task_id: t.parentTaskId, is_mind_map_step: true });
+      }
+    }
+
+    const unique = new Map(patches.map(p => [p.id, p]));
+    await Promise.allSettled(
+      [...unique.values()].map(p =>
+        fetch('/api/admin/project-tasks', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(p),
+        })
+      )
+    );
+  };
 
   const fetchData = async () => {
     setLoading(true);
+    const parents = loadMindMapParents();
+    setMindMapParents(parents);
     try {
       const [hierarchyRes, tasksRes, logsRes] = await Promise.all([
         fetch('/api/admin/spaces'),
@@ -224,7 +279,19 @@ export default function SpacesPage() {
         }));
         setLists(mappedLists);
 
-        const mappedTasks = (taskData.tasks || []).map(mapTask);
+        let mappedTasks = (taskData.tasks || []).map((t: any) => mapTask(t, null, parents));
+        await syncMindMapBranchesToDb(mappedTasks, parents);
+        mappedTasks = mappedTasks.map(t => {
+          const parentTaskId = t.parentTaskId ?? parents[t.id] ?? null;
+          return {
+            ...t,
+            parentTaskId,
+            is_mind_map_step: isMindMapBranchTask(
+              { id: t.id, parentTaskId, is_mind_map_step: t.is_mind_map_step },
+              parents
+            ),
+          };
+        });
         setTasks(mappedTasks);
 
         // Auto-select first list if nothing selected
@@ -304,6 +371,89 @@ export default function SpacesPage() {
 
   const closeModal = () => {
     setModalConfig({ ...modalConfig, isOpen: false });
+  };
+
+  const resolveMindMapDefaultListId = (): string | null => {
+    if (!activeItem) return null;
+    if (activeItem.type === 'list') return activeItem.id;
+    const existingList = lists.find(l => l.parentId === activeItem.id);
+    if (existingList) return existingList.id;
+    if (activeItem.type === 'space') {
+      const sf = folders.filter(f => f.spaceId === activeItem.id);
+      for (const f of sf) {
+        const fl = lists.find(l => l.parentId === f.id);
+        if (fl) return fl.id;
+      }
+    }
+    return null;
+  };
+
+  const handleMindMapTaskOpen = (taskId: string) => {
+    const task = tasks.find(t => t.id === taskId);
+    if (task) openModal('Rename', task.id, 'task', task.title, task);
+  };
+
+  const handleMindMapCreateTask = async (
+    listId: string,
+    title: string,
+    parentTaskId?: string | null
+  ): Promise<{ ok: boolean; taskId?: string }> => {
+    const trimmed = title.trim();
+    if (!trimmed) return { ok: false };
+    try {
+      const body: Record<string, unknown> = {
+        list_id: listId,
+        title: trimmed,
+        status: 'TO DO',
+      };
+      if (parentTaskId) {
+        body.parent_task_id = parentTaskId;
+        body.is_mind_map_step = true;
+      }
+
+      const res = await fetch('/api/admin/project-tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        showToast(err.error || 'Failed to create task', 'error');
+        return { ok: false };
+      }
+
+      const newItem = await res.json();
+      const taskId = String(newItem.id);
+      if (parentTaskId) {
+        setMindMapParents(saveMindMapParent(taskId, parentTaskId));
+      }
+
+      const mapped = mapTask(newItem, parentTaskId ?? null);
+      setTasks(prev => [...prev, mapped]);
+      fetchLogs();
+      showToast(parentTaskId ? 'Mind map step added' : 'Task added');
+      return { ok: true, taskId };
+    } catch {
+      showToast('Failed to create task', 'error');
+      return { ok: false };
+    }
+  };
+
+  const handleMindMapDeleteTask = async (taskId: string) => {
+    if (!confirm('Delete this task?')) return;
+    try {
+      const res = await fetch(`/api/admin/project-tasks?id=${encodeURIComponent(taskId)}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const err = await res.json();
+        showToast(err.error || 'Failed to delete task', 'error');
+        return;
+      }
+      performDelete('task', taskId);
+      showToast('Task deleted');
+    } catch {
+      showToast('Failed to delete task', 'error');
+    }
   };
 
   const handleModalSubmit = async (e: React.FormEvent) => {
@@ -792,6 +942,11 @@ export default function SpacesPage() {
     }
   }
 
+  // Hide mind-map branches from list/board/etc. — data stays in DB for the mind map
+  if (activeView !== 'mindmap') {
+    currentTasks = currentTasks.filter(t => !isMindMapBranchTask(t, mindMapParents));
+  }
+
   // Sort: Favorites first
   currentTasks.sort((a, b) => {
     if (!!a.is_favorite === !!b.is_favorite) return 0;
@@ -1006,7 +1161,7 @@ export default function SpacesPage() {
 
             {activeItem && (
               <div className={styles.viewTabs} style={{ marginTop: 'auto', marginBottom: '-1px' }}>
-                <div 
+                <div
                   ref={tabsScrollRef}
                   className={styles.tabsScrollArea}
                   onWheel={(e) => {
@@ -1027,9 +1182,10 @@ export default function SpacesPage() {
                                 view === 'inbox' ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '6px' }}><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" /><polyline points="22,6 12,13 2,6" /></svg> :
                                   view === 'archived' ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '6px' }}><rect width="20" height="5" x="2" y="3" rx="1" /><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" /><path d="M10 12h4" /></svg> :
                                     view === 'team' ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '6px' }}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg> :
-                                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '6px' }}><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><line x1="3" y1="9" x2="21" y2="9" /><line x1="3" y1="15" x2="21" y2="15" /><line x1="9" y1="3" x2="9" y2="21" /><line x1="15" y1="3" x2="15" y2="21" /></svg>;
+                                      view === 'mindmap' ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '6px' }}><circle cx="12" cy="12" r="3" /><circle cx="5" cy="8" r="2" /><circle cx="19" cy="8" r="2" /><circle cx="5" cy="16" r="2" /><circle cx="19" cy="16" r="2" /><line x1="9.5" y1="10" x2="7" y2="9" /><line x1="14.5" y1="10" x2="17" y2="9" /><line x1="9.5" y1="14" x2="7" y2="15" /><line x1="14.5" y1="14" x2="17" y2="15" /></svg> :
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '6px' }}><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><line x1="3" y1="9" x2="21" y2="9" /><line x1="3" y1="15" x2="21" y2="15" /><line x1="9" y1="3" x2="9" y2="21" /><line x1="15" y1="3" x2="15" y2="21" /></svg>;
 
-                    const label = view.charAt(0).toUpperCase() + view.slice(1);
+                    const label = getViewLabel(view);
 
                     return (
                       <button
@@ -1185,6 +1341,15 @@ export default function SpacesPage() {
                                   <div className={styles.addViewSub}>View & restore hidden tasks</div>
                                 </div>
                               </div>
+                              <div className={styles.addViewItem} onClick={() => { setActiveView('mindmap'); setPinnedViews(prev => prev.includes('mindmap') ? prev : [...prev, 'mindmap']); setIsAddViewDropdownOpen(false); }}>
+                                <div className={styles.addViewIcon} style={{ background: '#f5f3ff', color: '#8b5cf6' }}>
+                                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3" /><circle cx="5" cy="8" r="2" /><circle cx="19" cy="8" r="2" /><circle cx="5" cy="16" r="2" /><circle cx="19" cy="16" r="2" /><line x1="9.5" y1="10" x2="7" y2="9" /><line x1="14.5" y1="10" x2="17" y2="9" /><line x1="9.5" y1="14" x2="7" y2="15" /><line x1="14.5" y1="14" x2="17" y2="15" /></svg>
+                                </div>
+                                <div className={styles.addViewText}>
+                                  <div className={styles.addViewTitle}>Mind Map</div>
+                                  <div className={styles.addViewSub}>Map lists & tasks in a tree</div>
+                                </div>
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -1220,7 +1385,39 @@ export default function SpacesPage() {
             )}
           </div>
 
-          <div className={styles.dataArea} style={{ padding: '24px' }}>
+          <div
+            className={styles.dataArea}
+            style={{
+              padding: activeView === 'mindmap' ? 0 : undefined,
+              overflow: activeView === 'mindmap' ? 'hidden' : undefined,
+              display: activeView === 'mindmap' ? 'flex' : undefined,
+              flexDirection: activeView === 'mindmap' ? 'column' : undefined,
+            }}
+          >
+            {activeItem && activeView === 'mindmap' && (
+              <SpaceMindMapView
+                activeType={activeItem.type}
+                activeId={activeItem.id}
+                rootLabel={getItemName(activeItem.type, activeItem.id) || 'Untitled'}
+                lists={lists}
+                folders={folders}
+                tasks={currentTasks.map(t => ({
+                  id: t.id,
+                  listId: t.listId,
+                  title: t.title,
+                  status: t.status,
+                  priority: t.priority,
+                  parentTaskId: t.parentTaskId ?? mindMapParents[t.id] ?? null,
+                }))}
+                getStatusStyles={getStatusStyles}
+                onTaskOpen={handleMindMapTaskOpen}
+                onCreateTask={handleMindMapCreateTask}
+                onDeleteTask={handleMindMapDeleteTask}
+                defaultListId={resolveMindMapDefaultListId()}
+                parentOverrides={mindMapParents}
+              />
+            )}
+
             {activeItem && activeView === 'board' && (
               <div className={styles.boardContainer}>
                 {statuses.map(status => {
@@ -2559,26 +2756,26 @@ export default function SpacesPage() {
             </>
           ) : contextMenu.type === 'task' ? (
             <>
-              <div 
-                className={styles.contextMenuItem} 
-                onMouseEnter={() => setActiveSubMenu(null)} 
+              <div
+                className={styles.contextMenuItem}
+                onMouseEnter={() => setActiveSubMenu(null)}
                 onClick={activeView === 'inbox' ? undefined : () => { toggleFavorite(contextMenu.id); closeContextMenu(); }}
                 style={activeView === 'inbox' ? { opacity: 0.4, cursor: 'not-allowed', pointerEvents: 'none' } : {}}
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill={tasks.find(t => t.id === contextMenu.id)?.is_favorite ? "#f59e0b" : "none"} stroke={tasks.find(t => t.id === contextMenu.id)?.is_favorite ? "#f59e0b" : "currentColor"} strokeWidth="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>
                 {tasks.find(t => t.id === contextMenu.id)?.is_favorite ? 'Remove from favorites' : 'Favorite'}
               </div>
-              <div 
-                className={styles.contextMenuItem} 
-                onMouseEnter={() => setActiveSubMenu(null)} 
+              <div
+                className={styles.contextMenuItem}
+                onMouseEnter={() => setActiveSubMenu(null)}
                 onClick={() => { toggleFollowTask(contextMenu.id); closeContextMenu(); }}
               >
-                <svg 
-                  width="14" 
-                  height="14" 
-                  viewBox="0 0 24 24" 
-                  fill={followedTaskIds.includes(contextMenu.id) ? "#3b82f6" : "none"} 
-                  stroke={followedTaskIds.includes(contextMenu.id) ? "#3b82f6" : "currentColor"} 
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill={followedTaskIds.includes(contextMenu.id) ? "#3b82f6" : "none"}
+                  stroke={followedTaskIds.includes(contextMenu.id) ? "#3b82f6" : "currentColor"}
                   strokeWidth="2"
                 >
                   <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
@@ -2707,18 +2904,18 @@ export default function SpacesPage() {
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m9 18 6-6-6-6" /></svg>
                 Move to
               </div>
-              <div 
-                className={styles.contextMenuItem} 
-                onMouseEnter={() => setActiveSubMenu(null)} 
+              <div
+                className={styles.contextMenuItem}
+                onMouseEnter={() => setActiveSubMenu(null)}
                 onClick={activeView === 'inbox' ? undefined : () => { duplicateTask(contextMenu.id); closeContextMenu(); }}
                 style={activeView === 'inbox' ? { opacity: 0.4, cursor: 'not-allowed', pointerEvents: 'none' } : {}}
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect width="14" height="14" x="8" y="8" rx="2" ry="2" /><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" /></svg>
                 Duplicate
               </div>
-              <div 
-                className={styles.contextMenuItem} 
-                onMouseEnter={() => setActiveSubMenu(null)} 
+              <div
+                className={styles.contextMenuItem}
+                onMouseEnter={() => setActiveSubMenu(null)}
                 onClick={activeView === 'inbox' ? undefined : () => { openModal('Archive', contextMenu.id, 'task'); closeContextMenu(); }}
                 style={activeView === 'inbox' ? { opacity: 0.4, cursor: 'not-allowed', pointerEvents: 'none' } : {}}
               >

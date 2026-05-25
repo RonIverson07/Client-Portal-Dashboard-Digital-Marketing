@@ -1,0 +1,225 @@
+.wrapper {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  flex: 1;
+  position: relative;
+  background-color: #f8fafc;
+  background-image: radial-gradient(circle, #e2e8f0 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+.wrapper :global(.react-flow__controls) {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  overflow: hidden;
+}
+
+.wrapper :global(.react-flow__controls-button) {
+  background: white;
+  border-bottom: 1px solid #f1f5f9;
+  fill: #475569;
+}
+
+.wrapper :global(.react-flow__controls-button:hover) {
+  background: #f8fafc;
+}
+
+.emptyHint {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  padding: 8px 16px;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #64748b;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  pointer-events: none;
+}
+
+.emptyHint strong {
+  color: #2563eb;
+}
+
+.nodeWrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.nodeWrapWithDelete {
+  padding-top: 36px;
+}
+
+.deleteBtn {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid #fecaca;
+  background: white;
+  color: #ef4444;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  z-index: 2;
+}
+
+.deleteBtn:hover {
+  background: #fef2f2;
+  border-color: #ef4444;
+}
+
+.addBtn {
+  position: absolute;
+  right: -34px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 26px;
+  height: 26px;
+  z-index: 3;
+  border-radius: 50%;
+  border: 1px solid #cbd5e1;
+  background: white;
+  color: #475569;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  z-index: 2;
+}
+
+.addBtn:hover {
+  background: #eff6ff;
+  border-color: #2563eb;
+  color: #2563eb;
+}
+
+.nodeCard {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 140px;
+  max-width: 220px;
+  padding: 8px 12px;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.nodeCard:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.nodeCardSelected {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+}
+
+.nodeCardRoot {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  font-weight: 700;
+  min-width: 120px;
+}
+
+.nodeCardFolder {
+  border-left: 3px solid #f59e0b;
+}
+
+.nodeCardList {
+  border-left: 3px solid #10b981;
+}
+
+.nodeLabel {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.statusDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.toggleBtn {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.toggleBtn:hover {
+  background: #eff6ff;
+  border-color: #2563eb;
+  color: #2563eb;
+}
+
+.nodeIcon {
+  flex-shrink: 0;
+  color: #64748b;
+}
+
+/* Inline new-task input (ClickUp-style) */
+.draftNode {
+  min-width: 160px;
+  max-width: 220px;
+}
+
+.draftInput {
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+  background: white;
+  border: 2px dashed #2563eb;
+  border-radius: 8px;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  box-sizing: border-box;
+}
+
+.draftInput::placeholder {
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+.draftInput:focus {
+  border-style: solid;
+  border-color: #2563eb;
+}
