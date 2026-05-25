@@ -1250,8 +1250,21 @@ export default function SpacesPage() {
                       {colTasks.map(task => (
                         <div
                           key={task.id}
-                          className={styles.taskCard}
+                          className={`${styles.taskCard} ${selectedTaskIds.has(task.id) ? styles.taskCardSelected : ''}`}
                           draggable
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (selectedTaskIds.size > 0) {
+                              // In selection mode: toggle this task's selection
+                              setSelectedTaskIds(prev => {
+                                const next = new Set(prev);
+                                if (next.has(task.id)) next.delete(task.id); else next.add(task.id);
+                                return next;
+                              });
+                            } else {
+                              openModal('Rename', task.id, 'task', task.title, task);
+                            }
+                          }}
                           onDragStart={(e) => handleDragStart(e, task.id)}
                           onContextMenu={(e) => handleContextMenu(e, 'task', task.id)}
                         >
@@ -1503,6 +1516,7 @@ export default function SpacesPage() {
                                       key={task.id}
                                       className={styles.calendarTask}
                                       style={{ borderLeftColor: statusColor }}
+                                      onClick={(e) => { e.stopPropagation(); openModal('Rename', task.id, 'task', task.title, task); }}
                                       onContextMenu={(e) => handleContextMenu(e, 'task', task.id)}
                                     >
                                       {task.title}
@@ -1547,7 +1561,7 @@ export default function SpacesPage() {
                               <div key={i} className={styles.weekColumn}>
                                 <div className={styles.allDaySection}>
                                   {dayTasks.map(task => (
-                                    <div key={task.id} className={styles.calendarTask} style={{ borderLeftColor: getStatusStyles(task.status).color }}>
+                                    <div key={task.id} className={styles.calendarTask} style={{ borderLeftColor: getStatusStyles(task.status).color }} onClick={(e) => { e.stopPropagation(); openModal('Rename', task.id, 'task', task.title, task); }}>
                                       {task.title}
                                     </div>
                                   ))}
@@ -1579,7 +1593,7 @@ export default function SpacesPage() {
                         <div className={styles.dayColumn}>
                           <div className={styles.allDaySection}>
                             {currentTasks.filter(t => t.dueDate === viewDate.toISOString().split('T')[0]).map(task => (
-                              <div key={task.id} className={styles.calendarTask} style={{ borderLeftColor: getStatusStyles(task.status).color }}>
+                              <div key={task.id} className={styles.calendarTask} style={{ borderLeftColor: getStatusStyles(task.status).color }} onClick={(e) => { e.stopPropagation(); openModal('Rename', task.id, 'task', task.title, task); }}>
                                 {task.title}
                               </div>
                             ))}
