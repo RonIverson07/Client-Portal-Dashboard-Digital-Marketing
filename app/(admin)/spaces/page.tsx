@@ -89,6 +89,8 @@ export default function SpacesPage() {
   const [tableAssigneeFilter, setTableAssigneeFilter] = useState<string>('All');
   const [tableStatusFilter, setTableStatusFilter] = useState<string>('All');
   const [tablePriorityFilter, setTablePriorityFilter] = useState<string>('All');
+  const [followedTaskIds, setFollowedTaskIds] = useState<string[]>([]);
+  const [dismissedActivityIds, setDismissedActivityIds] = useState<string[]>([]);
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
@@ -109,6 +111,22 @@ export default function SpacesPage() {
           console.error('Failed to load view config', e);
         }
       }
+      const savedFollowed = localStorage.getItem('followed_task_ids');
+      if (savedFollowed) {
+        try {
+          setFollowedTaskIds(JSON.parse(savedFollowed));
+        } catch (e) {
+          console.error('Failed to load followed tasks', e);
+        }
+      }
+      const savedDismissed = localStorage.getItem('dismissed_activity_ids');
+      if (savedDismissed) {
+        try {
+          setDismissedActivityIds(JSON.parse(savedDismissed));
+        } catch (e) {
+          console.error('Failed to load dismissed activities', e);
+        }
+      }
       setIsHydrated(true);
     }
   }, []);
@@ -117,8 +135,10 @@ export default function SpacesPage() {
     if (isHydrated && typeof window !== 'undefined') {
       const config = { pinnedViews, pinnedViewIds, activeView };
       localStorage.setItem('spaces_view_config', JSON.stringify(config));
+      localStorage.setItem('followed_task_ids', JSON.stringify(followedTaskIds));
+      localStorage.setItem('dismissed_activity_ids', JSON.stringify(dismissedActivityIds));
     }
-  }, [pinnedViews, pinnedViewIds, activeView, isHydrated]);
+  }, [pinnedViews, pinnedViewIds, activeView, followedTaskIds, dismissedActivityIds, isHydrated]);
 
   // Handle clicks outside to close dropdowns/menus
   useEffect(() => {
@@ -456,12 +476,30 @@ export default function SpacesPage() {
     }
   };
 
+  const toggleFollowTask = (taskId: string) => {
+    const isFollowed = followedTaskIds.includes(taskId);
+    let newFollowed: string[];
+    if (isFollowed) {
+      newFollowed = followedTaskIds.filter(id => id !== taskId);
+      showToast('Stopped following task');
+    } else {
+      newFollowed = [...followedTaskIds, taskId];
+      showToast('Following task');
+    }
+    setFollowedTaskIds(newFollowed);
+  };
+
+  const dismissActivity = (logId: string) => {
+    setDismissedActivityIds(prev => [...prev, logId]);
+    showToast('Activity cleared from Inbox');
+  };
+
   const toggleFavorite = async (taskId: string) => {
     const task = tasks.find(t => t.id === taskId);
     if (!task) return;
 
     const newValue = !task.is_favorite;
-    
+
     // Update local state
     setTasks(tasks.map(t => t.id === taskId ? { ...t, is_favorite: newValue } : t));
 
@@ -867,41 +905,93 @@ export default function SpacesPage() {
 
               {/* Notification Bell */}
               <div style={{ position: 'relative' }}>
-                <button
-                  className={styles.notificationBtn}
-                  onClick={(e) => { e.stopPropagation(); setIsNotificationOpen(!isNotificationOpen); }}
-                >
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" /></svg>
-                  {tasks.filter(t => t.reminder_at).length > 0 && (
-                    <span className={styles.notificationBadge}>{tasks.filter(t => t.reminder_at).length}</span>
-                  )}
-                </button>
+                {(() => {
+                  const dropdownReminderItems = tasks.filter(t => t.reminder_at).map(task => ({
+                    id: `reminder-${task.id}`,
+                    type: 'reminder',
+                    time: new Date(task.reminder_at!).getTime(),
+                    title: task.title,
+                    subtitle: '⏰ REMINDER',
+                    description: `Scheduled for: ${new Date(task.reminder_at!).toLocaleDateString()}`,
+                  }));
 
-                {isNotificationOpen && (
-                  <div className={styles.notificationDropdown} onClick={(e) => e.stopPropagation()}>
-                    <div className={styles.notificationDropdownHeader}>
-                      <span>Notifications</span>
-                      <button onClick={() => setIsNotificationOpen(false)}>✕</button>
-                    </div>
-                    <div className={styles.notificationDropdownList}>
-                      {tasks.filter(t => t.reminder_at).length === 0 ? (
-                        <div style={{ padding: '20px', textAlign: 'center', color: '#94a3b8', fontSize: '13px' }}>
-                          No new notifications
-                        </div>
-                      ) : (
-                        tasks.filter(t => t.reminder_at).slice(0, 5).map(task => (
-                          <div key={task.id} className={styles.notificationSmallItem} onClick={() => { setActiveView('inbox'); setIsNotificationOpen(false); }}>
-                            <div style={{ fontSize: '13px', fontWeight: 600, color: '#1e293b' }}>{task.title}</div>
-                            <div style={{ fontSize: '11px', color: '#64748b' }}>Reminder for: {new Date(task.reminder_at!).toLocaleDateString()}</div>
+                  const followedTaskIdsInView = tasks.filter(t => followedTaskIds.includes(t.id)).map(t => t.id);
+                  const followedActivityLogs = activityLogs.filter(log => 
+                    followedTaskIdsInView.includes(log.task_id) && !dismissedActivityIds.includes(log.id)
+                  );
+
+                  const dropdownActivityItems = followedActivityLogs.map(log => {
+                    const task = tasks.find(t => t.id === log.task_id);
+                    let changeDescription = '';
+                    if (log.action_type === 'creation') {
+                      changeDescription = `Task created`;
+                    } else if (log.action_type === 'status_change') {
+                      changeDescription = `Moved from "${log.previous_value || 'None'}" to "${log.new_value}"`;
+                    } else if (log.action_type === 'archive') {
+                      changeDescription = `Archived`;
+                    } else if (log.action_type === 'unarchive') {
+                      changeDescription = `Restored`;
+                    } else {
+                      const field = log.action_type.replace('_change', '');
+                      changeDescription = `${field.charAt(0).toUpperCase() + field.slice(1)} updated`;
+                    }
+
+                    return {
+                      id: `activity-${log.id}`,
+                      type: 'activity',
+                      time: new Date(log.created_at).getTime(),
+                      title: task ? task.title : 'Unknown Task',
+                      subtitle: `📢 UPDATE`,
+                      description: changeDescription,
+                    };
+                  });
+
+                  const dropdownCombinedItems = [...dropdownReminderItems, ...dropdownActivityItems].sort((a, b) => b.time - a.time);
+
+                  return (
+                    <>
+                      <button
+                        className={styles.notificationBtn}
+                        onClick={(e) => { e.stopPropagation(); setIsNotificationOpen(!isNotificationOpen); }}
+                      >
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" /></svg>
+                        {dropdownCombinedItems.length > 0 && (
+                          <span className={styles.notificationBadge}>{dropdownCombinedItems.length}</span>
+                        )}
+                      </button>
+
+                      {isNotificationOpen && (
+                        <div className={styles.notificationDropdown} onClick={(e) => e.stopPropagation()}>
+                          <div className={styles.notificationDropdownHeader}>
+                            <span>Notifications</span>
+                            <button onClick={() => setIsNotificationOpen(false)}>✕</button>
                           </div>
-                        ))
+                          <div className={styles.notificationDropdownList}>
+                            {dropdownCombinedItems.length === 0 ? (
+                              <div style={{ padding: '20px', textAlign: 'center', color: '#94a3b8', fontSize: '13px' }}>
+                                No new notifications
+                              </div>
+                            ) : (
+                              dropdownCombinedItems.slice(0, 5).map(item => (
+                                <div key={item.id} className={styles.notificationSmallItem} onClick={() => { setActiveView('inbox'); setIsNotificationOpen(false); }} style={{ cursor: 'pointer' }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
+                                    <span style={{ fontSize: '10px', color: item.type === 'reminder' ? '#2563eb' : '#10b981', fontWeight: 700 }}>{item.subtitle}</span>
+                                    <span style={{ fontSize: '9px', color: '#94a3b8' }}>{new Date(item.time).toLocaleDateString([], { month: 'short', day: 'numeric' })}</span>
+                                  </div>
+                                  <div style={{ fontSize: '13px', fontWeight: 600, color: '#1e293b' }}>{item.title}</div>
+                                  <div style={{ fontSize: '11px', color: '#64748b' }}>{item.description}</div>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                          <div className={styles.notificationDropdownFooter}>
+                            <button onClick={() => { setActiveView('inbox'); setIsNotificationOpen(false); }}>View All in Inbox</button>
+                          </div>
+                        </div>
                       )}
-                    </div>
-                    <div className={styles.notificationDropdownFooter}>
-                      <button onClick={() => { setActiveView('inbox'); setIsNotificationOpen(false); }}>View All in Inbox</button>
-                    </div>
-                  </div>
-                )}
+                    </>
+                  );
+                })()}
               </div>
             </div>
 
@@ -1150,11 +1240,11 @@ export default function SpacesPage() {
                         >
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                             <div style={{ fontSize: '14px', fontWeight: 500, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                               {task.title}
-                               {task.is_favorite && (
-                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="#f59e0b"><path d="M12 2L15 8L22 9L17 14L18 21L12 17L6 21L7 14L2 9L9 8L12 2Z" /></svg>
-                               )}
-                             </div>
+                              {task.title}
+                              {task.is_favorite && (
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="#f59e0b"><path d="M12 2L15 8L22 9L17 14L18 21L12 17L6 21L7 14L2 9L9 8L12 2Z" /></svg>
+                              )}
+                            </div>
                             <button className={styles.addBtn} style={{ padding: '0 4px', fontSize: '16px', marginTop: '-4px' }} onClick={(e) => { e.stopPropagation(); handleContextMenu(e, 'task', task.id); }}>⋯</button>
                           </div>
 
@@ -1237,11 +1327,11 @@ export default function SpacesPage() {
                               {status === 'COMPLETE' && <svg width="8" height="8" viewBox="0 0 24 24" fill={statusColor}><path d="M20.285 2l-11.285 11.567-5.286-5.011-3.714 3.716 9 8.728 15-15.285z" /></svg>}
                             </div>
                             <span style={{ color: status === 'COMPLETE' ? '#94a3b8' : 'inherit', textDecoration: status === 'COMPLETE' ? 'line-through' : 'none', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                               {task.title}
-                               {task.is_favorite && (
-                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="#f59e0b"><path d="M12 2L15 8L22 9L17 14L18 21L12 17L6 21L7 14L2 9L9 8L12 2Z" /></svg>
-                               )}
-                             </span>
+                              {task.title}
+                              {task.is_favorite && (
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="#f59e0b"><path d="M12 2L15 8L22 9L17 14L18 21L12 17L6 21L7 14L2 9L9 8L12 2Z" /></svg>
+                              )}
+                            </span>
                           </div>
 
                           <div className={styles.cellIcon} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={(e) => { e.stopPropagation(); openModal('Rename', task.id, 'task', task.title, task); }}>
@@ -1559,27 +1649,27 @@ export default function SpacesPage() {
             {activeItem && activeView === 'table' && (
               <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
                 <div style={{ display: 'flex', gap: '12px', padding: '0 0 16px 0' }}>
-                  <select 
-                    value={tableAssigneeFilter} 
-                    onChange={e => setTableAssigneeFilter(e.target.value)} 
+                  <select
+                    value={tableAssigneeFilter}
+                    onChange={e => setTableAssigneeFilter(e.target.value)}
                     style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '13px', outline: 'none', background: '#fff', cursor: 'pointer', color: '#1e293b' }}
                   >
                     <option value="All">All Assignees</option>
                     {Array.from(new Set(tasks.map(t => formatAssignee(t.assignee)))).map(a => <option key={a} value={a}>{a}</option>)}
                   </select>
-                  
-                  <select 
-                    value={tableStatusFilter} 
-                    onChange={e => setTableStatusFilter(e.target.value)} 
+
+                  <select
+                    value={tableStatusFilter}
+                    onChange={e => setTableStatusFilter(e.target.value)}
                     style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '13px', outline: 'none', background: '#fff', cursor: 'pointer', color: '#1e293b' }}
                   >
                     <option value="All">All Statuses</option>
                     {statuses.map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
 
-                  <select 
-                    value={tablePriorityFilter} 
-                    onChange={e => setTablePriorityFilter(e.target.value)} 
+                  <select
+                    value={tablePriorityFilter}
+                    onChange={e => setTablePriorityFilter(e.target.value)}
                     style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '13px', outline: 'none', background: '#fff', cursor: 'pointer', color: '#1e293b' }}
                   >
                     <option value="All">All Priorities</option>
@@ -1599,53 +1689,53 @@ export default function SpacesPage() {
                         <th>Priority</th>
                       </tr>
                     </thead>
-                  <tbody>
-                    {currentTasks.filter(task => {
-                      if (tableAssigneeFilter !== 'All' && formatAssignee(task.assignee) !== tableAssigneeFilter) return false;
-                      if (tableStatusFilter !== 'All' && task.status !== tableStatusFilter) return false;
-                      if (tablePriorityFilter !== 'All' && (task.priority || 'Normal') !== tablePriorityFilter) return false;
-                      return true;
-                    }).map((task, index) => (
-                      <tr key={task.id}>
-                        <td style={{ color: '#94a3b8', fontSize: '11px' }}>{index + 1}</td>
-                        <td>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <div className={styles.statusIconCircle} style={{ borderColor: getStatusStyles(task.status).color, width: '12px', height: '12px' }}></div>
-                            {task.title}
-                          </div>
-                        </td>
-                        <td>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: 600 }}>
-                              {task.assignee ? formatAssignee(task.assignee)[0] : '?'}
+                    <tbody>
+                      {currentTasks.filter(task => {
+                        if (tableAssigneeFilter !== 'All' && formatAssignee(task.assignee) !== tableAssigneeFilter) return false;
+                        if (tableStatusFilter !== 'All' && task.status !== tableStatusFilter) return false;
+                        if (tablePriorityFilter !== 'All' && (task.priority || 'Normal') !== tablePriorityFilter) return false;
+                        return true;
+                      }).map((task, index) => (
+                        <tr key={task.id}>
+                          <td style={{ color: '#94a3b8', fontSize: '11px' }}>{index + 1}</td>
+                          <td>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <div className={styles.statusIconCircle} style={{ borderColor: getStatusStyles(task.status).color, width: '12px', height: '12px' }}></div>
+                              {task.title}
                             </div>
-                            <span style={{ fontSize: '12px' }}>{formatAssignee(task.assignee)}</span>
-                          </div>
-                        </td>
-                        <td>
-                          <span className={styles.statusBadge} style={{
-                            background: getStatusStyles(task.status).color + '20',
-                            color: getStatusStyles(task.status).color,
-                            border: `1px solid ${getStatusStyles(task.status).color}40`
-                          }}>
-                            {task.status.toUpperCase()}
-                          </span>
-                        </td>
-                        <td style={{ fontSize: '12px', color: '#64748b' }}>
-                          {task.dueDate || '-'}
-                        </td>
-                        <td>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: task.priority === 'Urgent' ? '#ef4444' : task.priority === 'High' ? '#f59e0b' : '#64748b' }}>
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" /><line x1="4" y1="22" x2="4" y2="15" stroke="currentColor" strokeWidth="2" /></svg>
-                            {task.priority}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                          </td>
+                          <td>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: 600 }}>
+                                {task.assignee ? formatAssignee(task.assignee)[0] : '?'}
+                              </div>
+                              <span style={{ fontSize: '12px' }}>{formatAssignee(task.assignee)}</span>
+                            </div>
+                          </td>
+                          <td>
+                            <span className={styles.statusBadge} style={{
+                              background: getStatusStyles(task.status).color + '20',
+                              color: getStatusStyles(task.status).color,
+                              border: `1px solid ${getStatusStyles(task.status).color}40`
+                            }}>
+                              {task.status.toUpperCase()}
+                            </span>
+                          </td>
+                          <td style={{ fontSize: '12px', color: '#64748b' }}>
+                            {task.dueDate || '-'}
+                          </td>
+                          <td>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: task.priority === 'Urgent' ? '#ef4444' : task.priority === 'High' ? '#f59e0b' : '#64748b' }}>
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" /><line x1="4" y1="22" x2="4" y2="15" stroke="currentColor" strokeWidth="2" /></svg>
+                              {task.priority}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </div>
             )}
 
             {activeItem && activeView === 'dashboard' && (
@@ -2050,34 +2140,95 @@ export default function SpacesPage() {
                 </div>
 
                 <div className={styles.inboxList}>
-                  {currentTasks.filter(t => t.reminder_at).length === 0 ? (
-                    <div className={styles.emptyInbox}>
-                      <div className={styles.emptyInboxIcon}>📬</div>
-                      <h3>Your inbox is empty</h3>
-                      <p>All caught up! New reminders and notifications will appear here.</p>
-                    </div>
-                  ) : (
-                    currentTasks.filter(t => t.reminder_at).map(task => (
-                      <div key={task.id} className={styles.inboxItem}>
-                        <div className={styles.inboxItemStatus} style={{ background: getStatusStyles(task.status).bg }}></div>
+                  {(() => {
+                    const reminderItems = currentTasks.filter(t => t.reminder_at).map(task => ({
+                      id: `reminder-${task.id}`,
+                      taskId: task.id,
+                      type: 'reminder',
+                      time: new Date(task.reminder_at!).getTime(),
+                      status: task.status,
+                      subtitle: '⏰ REMINDER',
+                      badgeColor: '#2563eb',
+                      title: task.title,
+                      description: task.description || 'No description provided.',
+                      dateLabel: `Scheduled for: ${new Date(task.reminder_at!).toLocaleString()}`,
+                      onClear: () => setTaskReminder(task.id, null),
+                      showOptions: true,
+                    }));
+
+                    const followedTaskIdsInView = currentTasks.filter(t => followedTaskIds.includes(t.id)).map(t => t.id);
+                    const followedActivityLogs = activityLogs.filter(log => 
+                      followedTaskIdsInView.includes(log.task_id) && !dismissedActivityIds.includes(log.id)
+                    );
+
+                    const activityItems = followedActivityLogs.map(log => {
+                      const task = tasks.find(t => t.id === log.task_id);
+                      let changeDescription = '';
+                      if (log.action_type === 'creation') {
+                        changeDescription = `Task created with status: ${log.new_value}`;
+                      } else if (log.action_type === 'status_change') {
+                        changeDescription = `Status updated from "${log.previous_value || 'None'}" to "${log.new_value}"`;
+                      } else if (log.action_type === 'archive') {
+                        changeDescription = `Task was archived`;
+                      } else if (log.action_type === 'unarchive') {
+                        changeDescription = `Task was restored from archive`;
+                      } else {
+                        const field = log.action_type.replace('_change', '');
+                        const capitalizedField = field.charAt(0).toUpperCase() + field.slice(1);
+                        changeDescription = `${capitalizedField} updated from "${log.previous_value || ''}" to "${log.new_value || ''}"`;
+                      }
+
+                      return {
+                        id: `activity-${log.id}`,
+                        taskId: log.task_id,
+                        type: 'activity',
+                        time: new Date(log.created_at).getTime(),
+                        status: task ? task.status : 'TO DO',
+                        subtitle: `📢 UPDATE: ${log.action_type.toUpperCase().replace('_', ' ')}`,
+                        badgeColor: '#10b981',
+                        title: task ? task.title : 'Unknown Task',
+                        description: changeDescription,
+                        dateLabel: `Activity at: ${new Date(log.created_at).toLocaleString()}`,
+                        onClear: () => dismissActivity(log.id),
+                        showOptions: false,
+                      };
+                    });
+
+                    const combinedItems = [...reminderItems, ...activityItems].sort((a, b) => b.time - a.time);
+
+                    if (combinedItems.length === 0) {
+                      return (
+                        <div className={styles.emptyInbox}>
+                          <div className={styles.emptyInboxIcon}>📬</div>
+                          <h3>Your inbox is empty</h3>
+                          <p>All caught up! New reminders and followed task updates will appear here.</p>
+                        </div>
+                      );
+                    }
+
+                    return combinedItems.map(item => (
+                      <div key={item.id} className={styles.inboxItem}>
+                        <div className={styles.inboxItemStatus} style={{ background: getStatusStyles(item.status).bg }}></div>
                         <div className={styles.inboxItemContent}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase' }}>{task.status}</span>
-                              <span style={{ fontSize: '11px', color: '#2563eb', fontWeight: 700 }}>⏰ REMINDER</span>
+                              <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase' }}>{item.status}</span>
+                              <span style={{ fontSize: '11px', color: item.badgeColor, fontWeight: 700 }}>{item.subtitle}</span>
                             </div>
-                            <span style={{ fontSize: '11px', color: '#94a3b8' }}>Scheduled for: {new Date(task.reminder_at!).toLocaleString()}</span>
+                            <span style={{ fontSize: '11px', color: '#94a3b8' }}>{item.dateLabel}</span>
                           </div>
-                          <div style={{ fontSize: '15px', fontWeight: 600, color: '#1e293b', marginBottom: '4px' }}>{task.title}</div>
-                          <div style={{ fontSize: '13px', color: '#64748b' }}>{task.description || 'No description provided.'}</div>
+                          <div style={{ fontSize: '15px', fontWeight: 600, color: '#1e293b', marginBottom: '4px' }}>{item.title}</div>
+                          <div style={{ fontSize: '13px', color: '#64748b' }}>{item.description}</div>
                         </div>
                         <div className={styles.inboxItemActions}>
-                          <button className={styles.inboxActionBtn} title="Mark as Done" onClick={() => setTaskReminder(task.id, null)}>✓</button>
-                          <button className={styles.inboxActionBtn} title="Options" onClick={(e) => { e.stopPropagation(); handleContextMenu(e, 'task', task.id, 'remind'); }}>⋯</button>
+                          <button className={styles.inboxActionBtn} title="Dismiss" onClick={item.onClear}>✓</button>
+                          {item.showOptions && (
+                            <button className={styles.inboxActionBtn} title="Options" onClick={(e) => { e.stopPropagation(); handleContextMenu(e, 'task', item.taskId, 'remind'); }}>⋯</button>
+                          )}
                         </div>
                       </div>
-                    ))
-                  )}
+                    ));
+                  })()}
                 </div>
               </div>
             )}
@@ -2356,9 +2507,23 @@ export default function SpacesPage() {
                 <svg width="14" height="14" viewBox="0 0 24 24" fill={tasks.find(t => t.id === contextMenu.id)?.is_favorite ? "#f59e0b" : "none"} stroke={tasks.find(t => t.id === contextMenu.id)?.is_favorite ? "#f59e0b" : "currentColor"} strokeWidth="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>
                 {tasks.find(t => t.id === contextMenu.id)?.is_favorite ? 'Remove from favorites' : 'Favorite'}
               </div>
-              <div className={styles.contextMenuItem} onMouseEnter={() => setActiveSubMenu(null)} onClick={() => { closeContextMenu(); }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" /></svg>
-                Follow task
+              <div 
+                className={styles.contextMenuItem} 
+                onMouseEnter={() => setActiveSubMenu(null)} 
+                onClick={() => { toggleFollowTask(contextMenu.id); closeContextMenu(); }}
+              >
+                <svg 
+                  width="14" 
+                  height="14" 
+                  viewBox="0 0 24 24" 
+                  fill={followedTaskIds.includes(contextMenu.id) ? "#3b82f6" : "none"} 
+                  stroke={followedTaskIds.includes(contextMenu.id) ? "#3b82f6" : "currentColor"} 
+                  strokeWidth="2"
+                >
+                  <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+                  <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+                </svg>
+                {followedTaskIds.includes(contextMenu.id) ? 'Unfollow task' : 'Follow task'}
               </div>
               <div
                 className={styles.contextMenuItem}
