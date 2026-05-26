@@ -71,6 +71,24 @@ const getStatusStyles = (status: string) => {
   return { color: '#64748b', bg: '#f1f5f9' };
 };
 
+// Returns a local YYYY-MM-DD string (avoids UTC timezone shift from toISOString)
+const localDateStr = (d: Date) => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
+// Returns true if a task should appear on the given date (covers startDate–dueDate range)
+const calendarTaskInRange = (task: { startDate?: string; dueDate?: string }, dateStr: string) => {
+  const start = task.startDate;
+  const due = task.dueDate;
+  if (start && due) return dateStr >= start && dateStr <= due;
+  if (start) return dateStr === start;
+  if (due) return dateStr === due;
+  return false;
+};
+
 const formatAssignee = (name: string | undefined) => {
   if (!name) return 'Unassigned';
   if (name === 'Onboarding Assistant') return 'Assistant';
@@ -135,14 +153,14 @@ export default function SpacesPage() {
     title: string;
     message: string;
     onConfirm: () => void;
-  }>({ isOpen: false, title: '', message: '', onConfirm: () => {} });
+  }>({ isOpen: false, title: '', message: '', onConfirm: () => { } });
 
   const showConfirmDialog = (title: string, message: string, onConfirm: () => void) => {
     setConfirmDialog({ isOpen: true, title, message, onConfirm });
   };
 
   const closeConfirmDialog = () => {
-    setConfirmDialog({ isOpen: false, title: '', message: '', onConfirm: () => {} });
+    setConfirmDialog({ isOpen: false, title: '', message: '', onConfirm: () => { } });
   };
 
   const tabsScrollRef = useRef<HTMLDivElement>(null);
@@ -447,7 +465,7 @@ export default function SpacesPage() {
             setChecklistItems(d.items.map((i: any) => ({ id: i.id, text: i.text, done: i.done })));
           }
         })
-        .catch(() => {})
+        .catch(() => { })
         .finally(() => setLoadingChecklist(false));
     } else {
       editingTaskIdRef.current = null;
@@ -1830,90 +1848,90 @@ export default function SpacesPage() {
 
                 <div className={styles.listViewContainer}>
 
-                {statuses.filter(s => listStatusFilter === 'All' || s === listStatusFilter).map(status => {
-                  const colTasks = currentTasks.filter(t => t.status === status);
-                  const { color: statusColor, bg: statusBg } = getStatusStyles(status);
+                  {statuses.filter(s => listStatusFilter === 'All' || s === listStatusFilter).map(status => {
+                    const colTasks = currentTasks.filter(t => t.status === status);
+                    const { color: statusColor, bg: statusBg } = getStatusStyles(status);
 
-                  return (
-                    <div key={status} className={styles.statusGroup}>
-                      <div className={styles.statusGroupHeader} style={{ background: statusBg, color: statusColor }}>
-                        {status}
-                        <span className={styles.statusCount}>{colTasks.length}</span>
-                      </div>
-
-                      <div className={styles.listViewHeader}>
-                        <div>Name</div>
-                        <div>Assignee</div>
-                        <div>Due Date</div>
-                        <div>Priority</div>
-                        <div></div>
-                      </div>
-
-                      {colTasks.map(task => (
-                        <div key={task.id} className={styles.listRow}>
-                          <div className={styles.taskNameCell} onClick={(e) => { e.stopPropagation(); openModal('Rename', task.id, 'task', task.title, task); }}>
-                            <div className={styles.statusIconCircle} style={{ borderColor: statusColor }} onClick={(e) => { e.stopPropagation(); handleContextMenu(e, 'statusGroup', status); }}>
-                              {status === 'COMPLETE' && <svg width="8" height="8" viewBox="0 0 24 24" fill={statusColor}><path d="M20.285 2l-11.285 11.567-5.286-5.011-3.714 3.716 9 8.728 15-15.285z" /></svg>}
-                            </div>
-                            <span style={{ color: status === 'COMPLETE' ? '#94a3b8' : 'inherit', textDecoration: status === 'COMPLETE' ? 'line-through' : 'none', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              {task.title}
-                              {task.is_favorite && (
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="#f59e0b"><path d="M12 2L15 8L22 9L17 14L18 21L12 17L6 21L7 14L2 9L9 8L12 2Z" /></svg>
-                              )}
-                            </span>
-                          </div>
-
-                          <div className={styles.cellIcon} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={(e) => { e.stopPropagation(); openModal('Rename', task.id, 'task', task.title, task); }}>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
-                            <span style={{ fontSize: '13px', color: '#64748b' }}>{formatAssignee(task.assignee)}</span>
-                          </div>
-
-                          <div className={styles.cellIcon} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); openModal('Rename', task.id, 'task', task.title, task); }}>
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
-                            {task.dueDate || '-'}
-                          </div>
-
-                          <div className={styles.cellIcon} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }} onClick={(e) => { e.stopPropagation(); openModal('Rename', task.id, 'task', task.title, task); }}>
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill={task.priority === 'Urgent' ? '#ef4444' : 'none'} stroke={task.priority === 'Urgent' ? '#ef4444' : task.priority === 'High' ? '#f59e0b' : '#3b82f6'} strokeWidth="2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" /><line x1="4" y1="22" x2="4" y2="15" /></svg>
-                            {task.priority === 'Urgent' ? (
-                              <span style={{ color: '#ef4444', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase' }}>Urgent</span>
-                            ) : (
-                              <span style={{ color: task.priority === 'High' ? '#f59e0b' : '#3b82f6', fontSize: '11px', fontWeight: 600, textTransform: 'uppercase' }}>{task.priority}</span>
-                            )}
-                          </div>
-
-                          <div className={styles.cellIcon}>
-                            <button className={styles.addBtn} style={{ padding: '0 4px', fontSize: '16px' }} onClick={(e) => { e.stopPropagation(); handleContextMenu(e, 'task', task.id); }}>⋯</button>
-                          </div>
+                    return (
+                      <div key={status} className={styles.statusGroup}>
+                        <div className={styles.statusGroupHeader} style={{ background: statusBg, color: statusColor }}>
+                          {status}
+                          <span className={styles.statusCount}>{colTasks.length}</span>
                         </div>
-                      ))}
 
-                      {(() => {
-                        let targetListId = '';
-                        if (activeItem.type === 'list') targetListId = activeItem.id;
-                        else if (activeItem.type === 'folder') targetListId = lists.find(l => l.parentId === activeItem.id)?.id || '';
-                        else if (activeItem.type === 'space') {
-                          targetListId = lists.find(l => l.parentId === activeItem.id)?.id || '';
-                          if (!targetListId) {
-                            const sf = folders.filter(f => f.spaceId === activeItem.id);
-                            for (const f of sf) {
-                              const fl = lists.find(l => l.parentId === f.id);
-                              if (fl) { targetListId = fl.id; break; }
+                        <div className={styles.listViewHeader}>
+                          <div>Name</div>
+                          <div>Assignee</div>
+                          <div>Due Date</div>
+                          <div>Priority</div>
+                          <div></div>
+                        </div>
+
+                        {colTasks.map(task => (
+                          <div key={task.id} className={styles.listRow}>
+                            <div className={styles.taskNameCell} onClick={(e) => { e.stopPropagation(); openModal('Rename', task.id, 'task', task.title, task); }}>
+                              <div className={styles.statusIconCircle} style={{ borderColor: statusColor }} onClick={(e) => { e.stopPropagation(); handleContextMenu(e, 'statusGroup', status); }}>
+                                {status === 'COMPLETE' && <svg width="8" height="8" viewBox="0 0 24 24" fill={statusColor}><path d="M20.285 2l-11.285 11.567-5.286-5.011-3.714 3.716 9 8.728 15-15.285z" /></svg>}
+                              </div>
+                              <span style={{ color: status === 'COMPLETE' ? '#94a3b8' : 'inherit', textDecoration: status === 'COMPLETE' ? 'line-through' : 'none', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                {task.title}
+                                {task.is_favorite && (
+                                  <svg width="12" height="12" viewBox="0 0 24 24" fill="#f59e0b"><path d="M12 2L15 8L22 9L17 14L18 21L12 17L6 21L7 14L2 9L9 8L12 2Z" /></svg>
+                                )}
+                              </span>
+                            </div>
+
+                            <div className={styles.cellIcon} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={(e) => { e.stopPropagation(); openModal('Rename', task.id, 'task', task.title, task); }}>
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
+                              <span style={{ fontSize: '13px', color: '#64748b' }}>{formatAssignee(task.assignee)}</span>
+                            </div>
+
+                            <div className={styles.cellIcon} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); openModal('Rename', task.id, 'task', task.title, task); }}>
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
+                              {task.dueDate || '-'}
+                            </div>
+
+                            <div className={styles.cellIcon} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }} onClick={(e) => { e.stopPropagation(); openModal('Rename', task.id, 'task', task.title, task); }}>
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill={task.priority === 'Urgent' ? '#ef4444' : 'none'} stroke={task.priority === 'Urgent' ? '#ef4444' : task.priority === 'High' ? '#f59e0b' : '#3b82f6'} strokeWidth="2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" /><line x1="4" y1="22" x2="4" y2="15" /></svg>
+                              {task.priority === 'Urgent' ? (
+                                <span style={{ color: '#ef4444', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase' }}>Urgent</span>
+                              ) : (
+                                <span style={{ color: task.priority === 'High' ? '#f59e0b' : '#3b82f6', fontSize: '11px', fontWeight: 600, textTransform: 'uppercase' }}>{task.priority}</span>
+                              )}
+                            </div>
+
+                            <div className={styles.cellIcon}>
+                              <button className={styles.addBtn} style={{ padding: '0 4px', fontSize: '16px' }} onClick={(e) => { e.stopPropagation(); handleContextMenu(e, 'task', task.id); }}>⋯</button>
+                            </div>
+                          </div>
+                        ))}
+
+                        {(() => {
+                          let targetListId = '';
+                          if (activeItem.type === 'list') targetListId = activeItem.id;
+                          else if (activeItem.type === 'folder') targetListId = lists.find(l => l.parentId === activeItem.id)?.id || '';
+                          else if (activeItem.type === 'space') {
+                            targetListId = lists.find(l => l.parentId === activeItem.id)?.id || '';
+                            if (!targetListId) {
+                              const sf = folders.filter(f => f.spaceId === activeItem.id);
+                              for (const f of sf) {
+                                const fl = lists.find(l => l.parentId === f.id);
+                                if (fl) { targetListId = fl.id; break; }
+                              }
                             }
                           }
-                        }
 
-                        return targetListId && status === 'TO DO' ? (
-                          <div className={styles.addTaskRow} onClick={() => addTask(targetListId)}>
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                            Add Task
-                          </div>
-                        ) : null;
-                      })()}
-                    </div>
-                  );
-                })}
-              </div>
+                          return targetListId && status === 'TO DO' ? (
+                            <div className={styles.addTaskRow} onClick={() => addTask(targetListId)}>
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                              Add Task
+                            </div>
+                          ) : null;
+                        })()}
+                      </div>
+                    );
+                  })}
+                </div>
               </>
             )}
 
@@ -1973,61 +1991,114 @@ export default function SpacesPage() {
 
                 <div className={styles.calendarBody}>
                   {calendarView === 'month' ? (
-                    <div className={styles.calendarGrid}>
-                      {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-                        <div key={day} className={styles.weekdayHeader}>{day}</div>
-                      ))}
+                    <div className={styles.calendarMonthContainer}>
+                      <div className={styles.calendarWeekdayHeaders}>
+                        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                          <div key={day} className={styles.weekdayHeader}>{day}</div>
+                        ))}
+                      </div>
+                      <div className={styles.calendarWeeksBody}>
+                        {(() => {
+                          const days: { date: Date; isCurrentMonth: boolean }[] = [];
+                          const startOfMonth = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1);
+                          const endOfMonth = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 0);
+                          const startDay = startOfMonth.getDay();
+                          for (let i = startDay - 1; i >= 0; i--) {
+                            days.push({ date: new Date(viewDate.getFullYear(), viewDate.getMonth(), -i), isCurrentMonth: false });
+                          }
+                          for (let i = 1; i <= endOfMonth.getDate(); i++) {
+                            days.push({ date: new Date(viewDate.getFullYear(), viewDate.getMonth(), i), isCurrentMonth: true });
+                          }
+                          const remaining = 42 - days.length;
+                          for (let i = 1; i <= remaining; i++) {
+                            days.push({ date: new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, i), isCurrentMonth: false });
+                          }
+                          const weeks: { date: Date; isCurrentMonth: boolean }[][] = [];
+                          for (let i = 0; i < days.length; i += 7) weeks.push(days.slice(i, i + 7));
+                          const todayStr = new Date().toDateString();
 
-                      {(() => {
-                        const days = [];
-                        const startOfMonth = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1);
-                        const endOfMonth = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 0);
-                        const startDay = startOfMonth.getDay();
+                          return weeks.map((week, weekIdx) => {
+                            const weekStart = localDateStr(week[0].date);
+                            const weekEnd = localDateStr(week[6].date);
 
-                        for (let i = startDay - 1; i >= 0; i--) {
-                          const d = new Date(viewDate.getFullYear(), viewDate.getMonth(), -i);
-                          days.push({ date: d, isCurrentMonth: false });
-                        }
+                            const weekTasks = currentTasks.filter(task => {
+                              const s = task.startDate || task.dueDate;
+                              const e = task.dueDate || task.startDate;
+                              if (!s || !e) return false;
+                              return s <= weekEnd && e >= weekStart;
+                            });
 
-                        for (let i = 1; i <= endOfMonth.getDate(); i++) {
-                          const d = new Date(viewDate.getFullYear(), viewDate.getMonth(), i);
-                          days.push({ date: d, isCurrentMonth: true });
-                        }
+                            // Greedy slot assignment to stack non-overlapping bars
+                            type SlotEntry = { startCol: number; endCol: number; slot: number };
+                            const slotEntries: SlotEntry[] = [];
+                            const taskSlots: Record<string, number> = {};
+                            weekTasks.forEach(task => {
+                              const ts = task.startDate || task.dueDate || '';
+                              const te = task.dueDate || task.startDate || '';
+                              const scIdx = ts < weekStart ? 0 : week.findIndex(d => localDateStr(d.date) === ts);
+                              const ecIdx = te > weekEnd ? 6 : week.findIndex(d => localDateStr(d.date) === te);
+                              const startCol = scIdx < 0 ? 0 : scIdx;
+                              const endCol = ecIdx < 0 ? 6 : ecIdx;
+                              let slot = 0;
+                              while (slotEntries.some(e => e.slot === slot && !(e.endCol < startCol || e.startCol > endCol))) slot++;
+                              slotEntries.push({ startCol, endCol, slot });
+                              taskSlots[task.id] = slot;
+                            });
 
-                        const remaining = 42 - days.length;
-                        for (let i = 1; i <= remaining; i++) {
-                          const d = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, i);
-                          days.push({ date: d, isCurrentMonth: false });
-                        }
+                            const numSlots = weekTasks.length > 0 ? Math.max(...Object.values(taskSlots)) + 1 : 0;
+                            const rowMinHeight = Math.max(110, 36 + numSlots * 26 + 8);
 
-                        return days.map((dayObj, idx) => {
-                          const dateStr = dayObj.date.toISOString().split('T')[0];
-                          const dayTasks = currentTasks.filter(t => t.dueDate === dateStr);
-                          const isToday = new Date().toDateString() === dayObj.date.toDateString();
-
-                          return (
-                            <div key={idx} className={`${styles.calendarDay} ${!dayObj.isCurrentMonth ? styles.otherMonth : ''} ${isToday ? styles.todayDay : ''}`}>
-                              <div className={styles.dayLabel}>{dayObj.date.getDate()}</div>
-                              <div className={styles.dayTasks}>
-                                {dayTasks.map(task => {
-                                  const { color: statusColor } = getStatusStyles(task.status);
+                            return (
+                              <div key={weekIdx} className={styles.calendarWeekRow} style={{ minHeight: rowMinHeight }}>
+                                {week.map((dayObj, dayIdx) => {
+                                  const isToday = todayStr === dayObj.date.toDateString();
                                   return (
-                                    <div
-                                      key={task.id}
-                                      className={styles.calendarTask}
-                                      style={{ borderLeftColor: statusColor }}
-                                      onClick={(e) => { e.stopPropagation(); openModal('Rename', task.id, 'task', task.title, task); }}
-                                      onContextMenu={(e) => handleContextMenu(e, 'task', task.id)}
-                                    >
-                                      {task.title}
+                                    <div key={dayIdx} className={`${styles.calendarDayCell} ${!dayObj.isCurrentMonth ? styles.otherMonthCell : ''} ${isToday ? styles.todayDayCell : ''}`}>
+                                      <div className={`${styles.dayLabel} ${isToday ? styles.todayLabel : ''}`}>
+                                        {dayObj.date.getDate()}
+                                      </div>
                                     </div>
                                   );
                                 })}
+                                <div className={styles.calendarSpanBarsLayer}>
+                                  {weekTasks.map(task => {
+                                    const { color: statusColor } = getStatusStyles(task.status);
+                                    const ts = task.startDate || task.dueDate || '';
+                                    const te = task.dueDate || task.startDate || '';
+                                    const scIdx = ts < weekStart ? 0 : week.findIndex(d => localDateStr(d.date) === ts);
+                                    const ecIdx = te > weekEnd ? 6 : week.findIndex(d => localDateStr(d.date) === te);
+                                    const startCol = scIdx < 0 ? 0 : scIdx;
+                                    const endCol = ecIdx < 0 ? 6 : ecIdx;
+                                    const spanCols = endCol - startCol + 1;
+                                    const slot = taskSlots[task.id] || 0;
+                                    const isStart = ts >= weekStart;
+                                    const isEnd = te <= weekEnd;
+                                    return (
+                                      <div
+                                        key={task.id}
+                                        className={styles.calendarSpanBar}
+                                        style={{
+                                          left: `calc(${(startCol / 7) * 100}% + ${isStart ? 3 : 0}px)`,
+                                          width: `calc(${(spanCols / 7) * 100}% - ${isStart ? 6 : 3}px)`,
+                                          top: `${32 + slot * 26}px`,
+                                          background: statusColor + '18',
+                                          borderLeft: isStart ? `3px solid ${statusColor}` : 'none',
+                                          borderRadius: isStart && isEnd ? '4px' : isStart ? '4px 0 0 4px' : isEnd ? '0 4px 4px 0' : '0',
+                                          color: statusColor,
+                                        }}
+                                        onClick={(e) => { e.stopPropagation(); openModal('Rename', task.id, 'task', task.title, task); }}
+                                        onContextMenu={(e) => handleContextMenu(e, 'task', task.id)}
+                                      >
+                                        {task.title}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
                               </div>
-                            </div>
-                          );
-                        });
-                      })()}
+                            );
+                          });
+                        })()}
+                      </div>
                     </div>
                   ) : calendarView === 'week' ? (
                     <div className={styles.weekView}>
@@ -2055,8 +2126,8 @@ export default function SpacesPage() {
                           {Array.from({ length: 7 }).map((_, i) => {
                             const d = new Date(viewDate);
                             d.setDate(viewDate.getDate() - viewDate.getDay() + i);
-                            const dateStr = d.toISOString().split('T')[0];
-                            const dayTasks = currentTasks.filter(t => t.dueDate === dateStr);
+                            const dateStr = localDateStr(d);
+                            const dayTasks = currentTasks.filter(t => calendarTaskInRange(t, dateStr));
                             return (
                               <div key={i} className={styles.weekColumn}>
                                 <div className={styles.allDaySection}>
@@ -2092,7 +2163,7 @@ export default function SpacesPage() {
                         </div>
                         <div className={styles.dayColumn}>
                           <div className={styles.allDaySection}>
-                            {currentTasks.filter(t => t.dueDate === viewDate.toISOString().split('T')[0]).map(task => (
+                            {currentTasks.filter(t => calendarTaskInRange(t, localDateStr(viewDate))).map(task => (
                               <div key={task.id} className={styles.calendarTask} style={{ borderLeftColor: getStatusStyles(task.status).color }} onClick={(e) => { e.stopPropagation(); openModal('Rename', task.id, 'task', task.title, task); }}>
                                 {task.title}
                               </div>
@@ -2466,11 +2537,11 @@ export default function SpacesPage() {
                                 if (statusTasks.length === 0) return null;
                                 const expandedKey = `${member}-${status}`;
                                 const isExpanded = expandedTeamStatuses[expandedKey];
-                                
+
                                 return (
                                   <div key={status} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                    <div 
-                                      className={styles.memberStatusRow} 
+                                    <div
+                                      className={styles.memberStatusRow}
                                       style={{ cursor: 'pointer' }}
                                       onClick={() => setExpandedTeamStatuses(prev => ({ ...prev, [expandedKey]: !prev[expandedKey] }))}
                                     >
@@ -2483,17 +2554,17 @@ export default function SpacesPage() {
                                         <span style={{ fontSize: '12px', color: '#94a3b8' }}>({statusTasks.length})</span>
                                       </div>
                                     </div>
-                                    
+
                                     {isExpanded && (
                                       <div style={{ paddingLeft: '26px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                         {statusTasks.map(task => (
-                                          <div 
-                                            key={task.id} 
+                                          <div
+                                            key={task.id}
                                             className={styles.teamTaskItem}
                                             onClick={(e) => { e.stopPropagation(); openModal('Rename', task.id, 'task', task.title, task); }}
                                           >
-                                            <div 
-                                              className={styles.teamTaskIcon} 
+                                            <div
+                                              className={styles.teamTaskIcon}
                                               style={{ color: getStatusStyles(status).color }}
                                             />
                                             <span className={styles.teamTaskTitle}>{task.title}</span>
@@ -3042,7 +3113,7 @@ export default function SpacesPage() {
                     {/* Checklist */}
                     <div className={styles.checklistSection}>
                       <div className={styles.checklistLabel}>
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m9 11 3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m9 11 3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>
                         Checklist
                         {checklistItems.length > 0 && (
                           <span className={styles.checklistProgress}>

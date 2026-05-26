@@ -1283,6 +1283,104 @@
   color: #0f172a;
 }
 
+/* Month view spanning-bar layout */
+.calendarMonthContainer {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.calendarWeekdayHeaders {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  background: #e2e8f0;
+  gap: 1px;
+}
+
+.calendarWeeksBody {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  background: #e2e8f0;
+  gap: 1px;
+}
+
+.calendarWeekRow {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 1px;
+  background: #e2e8f0;
+}
+
+.calendarDayCell {
+  background: white;
+  min-height: 110px;
+  padding: 8px;
+}
+
+.otherMonthCell {
+  background: #fcfcfc;
+}
+
+.todayDayCell {
+  background: #f0f9ff;
+}
+
+.dayLabel {
+  font-size: 13px;
+  font-weight: 500;
+  color: #64748b;
+  margin-bottom: 4px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+.otherMonthCell .dayLabel {
+  color: #cbd5e1;
+}
+
+.todayLabel {
+  background: #3b82f6;
+  color: white !important;
+  font-weight: 700;
+}
+
+.calendarSpanBarsLayer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.calendarSpanBar {
+  position: absolute;
+  height: 22px;
+  font-size: 11px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  padding: 0 6px;
+  cursor: pointer;
+  pointer-events: all;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: filter 0.15s;
+}
+
+.calendarSpanBar:hover {
+  filter: brightness(0.88);
+}
+
+/* Keep old calendarGrid for backward compat (week/day views) */
 .calendarGrid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
@@ -1301,63 +1399,6 @@
   text-transform: uppercase;
 }
 
-.calendarDay {
-  background: white;
-  min-height: 120px;
-  padding: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  overflow-y: auto;
-}
-
-.dayLabel {
-  font-size: 13px;
-  font-weight: 500;
-  color: #64748b;
-  margin-bottom: 4px;
-}
-
-.otherMonth {
-  background: #fcfcfc;
-}
-
-.otherMonth .dayLabel {
-  color: #cbd5e1;
-}
-
-.todayDay {
-  background: #f0f9ff;
-}
-
-.todayDay .dayLabel {
-  color: #3b82f6;
-  font-weight: 700;
-}
-
-.dayTasks {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.calendarTask {
-  font-size: 11px;
-  padding: 4px 8px;
-  background: #f1f5f9;
-  border-radius: 4px;
-  border-left: 3px solid #64748b;
-  color: #1e293b;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  cursor: pointer;
-}
-
-.calendarTask:hover {
-  filter: brightness(0.95);
-}
-
 .calendarBody {
   flex: 1;
   display: flex;
@@ -1365,6 +1406,7 @@
   overflow-y: auto;
   background: white;
 }
+
 
 /* Week & Day View Common */
 .timeGutter {
