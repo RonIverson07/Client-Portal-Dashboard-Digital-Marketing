@@ -43,3 +43,10 @@ export function getDisplayImageUrl(url: string): string {
 export function isGoogleDriveUrl(url: string): boolean {
   return !!(url && (url.includes('drive.google.com') || url.includes('drive.usercontent.google.com')));
 }
+
+/** Whether a task cover URL can show as a board thumbnail. */
+export function canPreviewTaskCover(url: string | null | undefined): boolean {
+  if (!url?.trim()) return false;
+  if (isGoogleDriveUrl(url)) return true;
+  return /\.(jpg|jpeg|png|gif|webp|avif|jfif)(\?|$)/i.test(url.trim());
+}

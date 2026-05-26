@@ -10,6 +10,9 @@ import {
   sumHoursInRange,
   toDateKey,
 } from '@/lib/workloadUtils';
+import { canPreviewTaskCover, getDisplayImageUrl, isGoogleDriveUrl } from '@/lib/imageUtils';
+
+type TaskCoverMode = 'none' | 'image' | 'drive';
 
 type SpaceView = 'board' | 'list' | 'calendar' | 'gantt' | 'table' | 'dashboard' | 'activity' | 'workload' | 'inbox' | 'archived' | 'team' | 'mindmap';
 
@@ -38,6 +41,7 @@ interface SpaceTask {
   parentTaskId?: string | null;
   is_mind_map_step?: boolean;
   timeEstimateHours?: number | null;
+  coverImageUrl?: string | null;
 }
 
 interface ActivityLog {
@@ -110,6 +114,19 @@ export default function SpacesPage() {
   const [followedTaskIds, setFollowedTaskIds] = useState<string[]>([]);
   const [dismissedActivityIds, setDismissedActivityIds] = useState<string[]>([]);
   const [mindMapParents, setMindMapParents] = useState<Record<string, string>>({});
+  const [uploadingCover, setUploadingCover] = useState(false);
+  const [coverPreviewError, setCoverPreviewError] = useState(false);
+  const coverFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Checklist state
+  type ChecklistItem = { id: string; text: string; done: boolean; _pending?: boolean };
+  const [checklistItems, setChecklistItems] = useState<ChecklistItem[]>([]);
+  const [checklistInput, setChecklistInput] = useState('');
+  const [loadingChecklist, setLoadingChecklist] = useState(false);
+  // tracks the task id currently open in the modal (for Edit Task saves)
+  const editingTaskIdRef = useRef<string | null>(null);
+
+  const [expandedTeamStatuses, setExpandedTeamStatuses] = useState<Record<string, boolean>>({});
 
   const tabsScrollRef = useRef<HTMLDivElement>(null);
 
@@ -228,6 +245,7 @@ export default function SpacesPage() {
       is_archived: t.is_archived || false,
       parentTaskId,
       is_mind_map_step: !!(t.is_mind_map_step || parentTaskId || parentLinks[t.id]),
+      coverImageUrl: (t.cover_image_url ?? t.coverImageUrl ?? null) as string | null,
     };
   };
 
@@ -355,6 +373,8 @@ export default function SpacesPage() {
     dueDate: string;
     startDate: string;
     timeEstimate: string;
+    coverImageUrl: string;
+    coverMode: TaskCoverMode;
     priority: 'Urgent' | 'High' | 'Normal' | 'Low' | 'Clear';
   }>({
     isOpen: false,
@@ -365,6 +385,8 @@ export default function SpacesPage() {
     dueDate: '',
     startDate: '',
     timeEstimate: '',
+    coverImageUrl: '',
+    coverMode: 'none',
     priority: 'Normal',
   });
 
@@ -387,11 +409,148 @@ export default function SpacesPage() {
         return Number.isFinite(num) ? String(num) : '';
       })(),
       priority: initialData.priority || 'Normal',
+      coverImageUrl: String(initialData.coverImageUrl ?? initialData.cover_image_url ?? '').trim(),
+      coverMode: (() => {
+        const url = String(initialData.coverImageUrl ?? initialData.cover_image_url ?? '').trim();
+        if (!url) return 'none' as TaskCoverMode;
+        return isGoogleDriveUrl(url) ? 'drive' : 'image';
+      })(),
     });
+    setCoverPreviewError(false);
+    setChecklistItems([]);
+    setChecklistInput('');
+    // Load checklist items if editing an existing task
+    if (type === 'Rename' && targetType === 'task' && targetId) {
+      editingTaskIdRef.current = targetId;
+      setLoadingChecklist(true);
+      fetch(`/api/admin/checklist?task_id=${encodeURIComponent(targetId)}`)
+        .then(r => r.json())
+        .then(d => {
+          if (d.items) {
+            setChecklistItems(d.items.map((i: any) => ({ id: i.id, text: i.text, done: i.done })));
+          }
+        })
+        .catch(() => {})
+        .finally(() => setLoadingChecklist(false));
+    } else {
+      editingTaskIdRef.current = null;
+    }
   };
 
   const closeModal = () => {
     setModalConfig({ ...modalConfig, isOpen: false });
+    setUploadingCover(false);
+    setCoverPreviewError(false);
+    setChecklistItems([]);
+    setChecklistInput('');
+    editingTaskIdRef.current = null;
+  };
+
+  const addChecklistItem = async () => {
+    const text = checklistInput.trim();
+    if (!text) return;
+    const taskId = editingTaskIdRef.current;
+    if (taskId) {
+      // Edit Task — persist immediately
+      const res = await fetch('/api/admin/checklist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ task_id: taskId, text, position: checklistItems.length }),
+      });
+      const saved = await res.json();
+      if (res.ok) {
+        setChecklistItems(prev => [...prev, { id: saved.id, text: saved.text, done: saved.done }]);
+      } else {
+        showToast(saved.error || 'Failed to add item', 'error');
+      }
+    } else {
+      // Add Task — store locally with a temp id; will be saved after task is created
+      setChecklistItems(prev => [...prev, { id: `_tmp_${Date.now()}`, text, done: false, _pending: true }]);
+    }
+    setChecklistInput('');
+  };
+
+  const toggleChecklistItem = async (id: string) => {
+    const item = checklistItems.find(i => i.id === id);
+    if (!item) return;
+    const newDone = !item.done;
+    setChecklistItems(prev => prev.map(i => i.id === id ? { ...i, done: newDone } : i));
+    if (!item._pending) {
+      await fetch('/api/admin/checklist', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, done: newDone }),
+      });
+    }
+  };
+
+  const deleteChecklistItem = async (id: string) => {
+    const item = checklistItems.find(i => i.id === id);
+    setChecklistItems(prev => prev.filter(i => i.id !== id));
+    if (item && !item._pending) {
+      await fetch(`/api/admin/checklist?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+    }
+  };
+
+  const updateChecklistItemText = (id: string, text: string) => {
+    setChecklistItems(prev => prev.map(i => i.id === id ? { ...i, text } : i));
+  };
+
+  const saveChecklistItemText = async (id: string, text: string) => {
+    const item = checklistItems.find(i => i.id === id);
+    if (!item || item._pending) return;
+    await fetch('/api/admin/checklist', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, text }),
+    });
+  };
+
+  const handleCoverFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      showToast('Please choose an image file', 'error');
+      return;
+    }
+
+    setUploadingCover(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('bucket', 'requests');
+
+      const res = await fetch('/api/admin/upload', {
+        method: 'POST',
+        body: formData,
+        credentials: 'include',
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Upload failed');
+
+      setModalConfig(prev => ({
+        ...prev,
+        coverMode: 'image',
+        coverImageUrl: data.url,
+      }));
+      setCoverPreviewError(false);
+      showToast('Image attached');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Upload failed';
+      showToast(message, 'error');
+    } finally {
+      setUploadingCover(false);
+      if (coverFileInputRef.current) coverFileInputRef.current.value = '';
+    }
+  };
+
+  const setCoverMode = (mode: TaskCoverMode) => {
+    setModalConfig(prev => ({
+      ...prev,
+      coverMode: mode,
+      coverImageUrl: mode === 'none' || mode !== prev.coverMode ? '' : prev.coverImageUrl,
+    }));
+    setCoverPreviewError(false);
   };
 
   const resolveMindMapDefaultListId = (): string | null => {
@@ -479,7 +638,12 @@ export default function SpacesPage() {
 
   const handleModalSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const { type, targetId, targetType, inputValue, moveTargetId, description, assignee, dueDate, startDate, timeEstimate, priority } = modalConfig;
+    const { type, targetId, targetType, inputValue, moveTargetId, description, assignee, dueDate, startDate, timeEstimate, coverImageUrl, coverMode, priority } = modalConfig;
+    const isEditTask = type === 'Rename' && targetType === 'task';
+    const resolvedCoverUrl =
+      isEditTask && coverMode !== 'none' && coverImageUrl.trim()
+        ? coverImageUrl.trim()
+        : null;
     const parsedTimeEstimate = timeEstimate.trim() ? parseFloat(timeEstimate) : null;
     const timeEstimateHours =
       parsedTimeEstimate != null && !isNaN(parsedTimeEstimate) && parsedTimeEstimate > 0
@@ -619,6 +783,18 @@ export default function SpacesPage() {
           const newItem = await res.json();
           const mapped = mapTask(newItem);
           setTasks([...tasks, { ...mapped, timeEstimateHours: mapped.timeEstimateHours ?? timeEstimateHours }]);
+          // Persist any checklist items added before the task existed
+          if (checklistItems.length > 0) {
+            await Promise.allSettled(
+              checklistItems.map((item, idx) =>
+                fetch('/api/admin/checklist', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ task_id: newItem.id, text: item.text, position: idx }),
+                })
+              )
+            );
+          }
           showToast('Task created successfully');
           fetchLogs();
           closeModal();
@@ -628,7 +804,9 @@ export default function SpacesPage() {
           showToast(
             msg.includes('time_estimate_hours')
               ? 'Add time_estimate_hours column in Supabase (see time_estimate_hours.sql), then try again.'
-              : msg,
+              : msg.includes('cover_image_url')
+                ? 'Add cover_image_url column in Supabase (see cover_image_url.sql), then try again.'
+                : msg,
             'error'
           );
         }
@@ -644,6 +822,7 @@ export default function SpacesPage() {
           body.start_date = startDate || null;
           body.time_estimate_hours = timeEstimateHours;
           body.priority = priority;
+          body.cover_image_url = resolvedCoverUrl;
         } else {
           body.type = targetType;
           body.name = inputValue;
@@ -668,7 +847,11 @@ export default function SpacesPage() {
             setTasks(tasks.map(t => {
               if (t.id !== targetId) return t;
               const mapped = mapTask(updated);
-              return { ...mapped, timeEstimateHours: mapped.timeEstimateHours ?? timeEstimateHours };
+              return {
+                ...mapped,
+                timeEstimateHours: mapped.timeEstimateHours ?? timeEstimateHours,
+                coverImageUrl: mapped.coverImageUrl ?? resolvedCoverUrl,
+              };
             }));
             showToast('Task updated successfully');
             fetchLogs();
@@ -680,7 +863,9 @@ export default function SpacesPage() {
           showToast(
             msg.includes('time_estimate_hours')
               ? 'Add time_estimate_hours column in Supabase (see time_estimate_hours.sql), then try again.'
-              : msg,
+              : msg.includes('cover_image_url')
+                ? 'Add cover_image_url column in Supabase (see cover_image_url.sql), then try again.'
+                : msg,
             'error'
           );
         }
@@ -789,6 +974,7 @@ export default function SpacesPage() {
           due_date: task.dueDate || null,
           start_date: task.startDate || null,
           time_estimate_hours: task.timeEstimateHours ?? null,
+          cover_image_url: task.coverImageUrl ?? null,
           priority: task.priority || 'Normal'
         })
       });
@@ -1524,6 +1710,18 @@ export default function SpacesPage() {
                           onDragStart={(e) => handleDragStart(e, task.id)}
                           onContextMenu={(e) => handleContextMenu(e, 'task', task.id)}
                         >
+                          {canPreviewTaskCover(task.coverImageUrl) && (
+                            <div className={styles.taskCardCover}>
+                              <img
+                                src={getDisplayImageUrl(task.coverImageUrl!)}
+                                alt=""
+                                className={styles.taskCardCoverImg}
+                                onError={e => {
+                                  (e.target as HTMLImageElement).style.display = 'none';
+                                }}
+                              />
+                            </div>
+                          )}
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                             <div style={{ fontSize: '14px', fontWeight: 500, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '6px' }}>
                               {task.title}
@@ -1533,6 +1731,12 @@ export default function SpacesPage() {
                             </div>
                             <button className={styles.addBtn} style={{ padding: '0 4px', fontSize: '16px', marginTop: '-4px' }} onClick={(e) => { e.stopPropagation(); handleContextMenu(e, 'task', task.id); }}>⋯</button>
                           </div>
+
+                          {task.description && (
+                            <div className={styles.taskCardDescription} title={task.description}>
+                              {task.description}
+                            </div>
+                          )}
 
                           <div className={styles.cardFooter}>
                             <div className={styles.cardFooterIcon} title="Assignee" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -2190,8 +2394,6 @@ export default function SpacesPage() {
                               <div style={{ fontSize: '16px', fontWeight: 700, color: '#0f172a' }}>{member}</div>
                             </div>
                             <div style={{ display: 'flex', gap: '8px' }}>
-                              <button className={styles.memberActionBtn}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg></button>
-                              <button className={styles.memberActionBtn}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="18 15 12 9 6 15" /></svg></button>
                             </div>
                           </div>
 
@@ -2222,14 +2424,40 @@ export default function SpacesPage() {
                               {statuses.filter(s => s !== 'COMPLETE').map(status => {
                                 const statusTasks = memberTasks.filter(t => t.status === status);
                                 if (statusTasks.length === 0) return null;
+                                const expandedKey = `${member}-${status}`;
+                                const isExpanded = expandedTeamStatuses[expandedKey];
+                                
                                 return (
-                                  <div key={status} className={styles.memberStatusRow}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: '#94a3b8' }}><path d="m9 18 6-6-6-6" /></svg>
-                                      <div style={{ width: '8px', height: '8px', borderRadius: '2px', background: getStatusStyles(status).color }}></div>
-                                      <span style={{ fontSize: '12px', fontWeight: 600, color: '#475569' }}>{status}</span>
-                                      <span style={{ fontSize: '12px', color: '#94a3b8' }}>({statusTasks.length})</span>
+                                  <div key={status} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                    <div 
+                                      className={styles.memberStatusRow} 
+                                      style={{ cursor: 'pointer' }}
+                                      onClick={() => setExpandedTeamStatuses(prev => ({ ...prev, [expandedKey]: !prev[expandedKey] }))}
+                                    >
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: '#94a3b8', transform: isExpanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' }}>
+                                          <path d="m9 18 6-6-6-6" />
+                                        </svg>
+                                        <div style={{ width: '8px', height: '8px', borderRadius: '2px', background: getStatusStyles(status).color }}></div>
+                                        <span style={{ fontSize: '12px', fontWeight: 600, color: '#475569' }}>{status}</span>
+                                        <span style={{ fontSize: '12px', color: '#94a3b8' }}>({statusTasks.length})</span>
+                                      </div>
                                     </div>
+                                    
+                                    {isExpanded && (
+                                      <div style={{ paddingLeft: '26px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                        {statusTasks.map(task => (
+                                          <div 
+                                            key={task.id} 
+                                            className={styles.teamTaskItem}
+                                            onClick={(e) => { e.stopPropagation(); openModal('Rename', task.id, 'task', task.title, task); }}
+                                          >
+                                            <div className={styles.teamTaskIcon} />
+                                            <span className={styles.teamTaskTitle}>{task.title}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
                                   </div>
                                 );
                               })}
@@ -2605,7 +2833,7 @@ export default function SpacesPage() {
                 </div>
                 <button type="button" className={styles.closeBtn} onClick={closeModal}>×</button>
               </div>
-              <div className={styles.modalBody}>
+              <div className={`${styles.modalBody} ${(modalConfig.type === 'Task' || (modalConfig.type === 'Rename' && modalConfig.targetType === 'task')) ? styles.taskModalBody : ''}`}>
                 {modalConfig.type === 'Delete' ? (
                   <div style={{ color: '#64748b', fontSize: '14px', lineHeight: '1.5' }}>
                     Are you sure you want to delete this {modalConfig.targetType}? This action cannot be undone and will remove all nested items.
@@ -2761,6 +2989,160 @@ export default function SpacesPage() {
                         <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600 }}>h</span>
                       </div>
                     </div>
+
+                    {/* Checklist */}
+                    <div className={styles.checklistSection}>
+                      <div className={styles.checklistLabel}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m9 11 3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                        Checklist
+                        {checklistItems.length > 0 && (
+                          <span className={styles.checklistProgress}>
+                            {checklistItems.filter(i => i.done).length}/{checklistItems.length}
+                          </span>
+                        )}
+                      </div>
+
+                      {checklistItems.length > 0 && (
+                        <div className={styles.checklistProgressBar}>
+                          <div
+                            className={styles.checklistProgressFill}
+                            style={{ width: `${(checklistItems.filter(i => i.done).length / checklistItems.length) * 100}%` }}
+                          />
+                        </div>
+                      )}
+
+                      <div className={styles.checklistItems}>
+                        {checklistItems.map(item => (
+                          <div key={item.id} className={`${styles.checklistItem} ${item.done ? styles.checklistItemDone : ''}`}>
+                            <div
+                              className={`${styles.checklistCheckbox} ${item.done ? styles.checklistCheckboxChecked : ''}`}
+                              onClick={() => toggleChecklistItem(item.id)}
+                            >
+                              {item.done && (
+                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3">
+                                  <polyline points="20 6 9 17 4 12" />
+                                </svg>
+                              )}
+                            </div>
+                            <input
+                              type="text"
+                              className={`${styles.checklistItemText} ${item.done ? styles.checklistItemTextDone : ''}`}
+                              value={item.text}
+                              onChange={e => updateChecklistItemText(item.id, e.target.value)}
+                              onBlur={e => saveChecklistItemText(item.id, e.target.value)}
+                            />
+                            <button
+                              type="button"
+                              className={styles.checklistDeleteBtn}
+                              onClick={() => deleteChecklistItem(item.id)}
+                              title="Remove item"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className={styles.checklistAddRow}>
+                        <input
+                          type="text"
+                          className={styles.checklistAddInput}
+                          placeholder="Add a checklist item…"
+                          value={checklistInput}
+                          onChange={e => setChecklistInput(e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addChecklistItem(); } }}
+                        />
+                        <button type="button" className={styles.checklistAddBtn} onClick={addChecklistItem}>
+                          + Add
+                        </button>
+                      </div>
+                    </div>
+
+                    {modalConfig.type === 'Rename' && modalConfig.targetType === 'task' && (
+                      <div className={styles.taskCoverSection}>
+                        <div className={styles.taskCoverLabel}>Attach image</div>
+                        <div className={styles.taskCoverModeRow}>
+                          <button
+                            type="button"
+                            className={`${styles.taskCoverModeBtn} ${modalConfig.coverMode === 'image' ? styles.taskCoverModeBtnActive : ''}`}
+                            onClick={() => setCoverMode('image')}
+                          >
+                            Attach image
+                          </button>
+                          <button
+                            type="button"
+                            className={`${styles.taskCoverModeBtn} ${modalConfig.coverMode === 'drive' ? styles.taskCoverModeBtnActive : ''}`}
+                            onClick={() => setCoverMode('drive')}
+                          >
+                            Google Drive link
+                          </button>
+                          {modalConfig.coverMode !== 'none' && (
+                            <button
+                              type="button"
+                              className={styles.taskCoverRemoveBtn}
+                              onClick={() => setCoverMode('none')}
+                            >
+                              Remove
+                            </button>
+                          )}
+                        </div>
+
+                        {modalConfig.coverMode === 'image' && (
+                          <div className={styles.taskCoverPanel}>
+                            <input
+                              ref={coverFileInputRef}
+                              type="file"
+                              accept="image/*"
+                              className={styles.taskCoverFileInput}
+                              onChange={handleCoverFileUpload}
+                            />
+                            <button
+                              type="button"
+                              className={styles.taskCoverUploadBtn}
+                              disabled={uploadingCover}
+                              onClick={() => coverFileInputRef.current?.click()}
+                            >
+                              {uploadingCover ? 'Uploading…' : modalConfig.coverImageUrl ? 'Replace image' : 'Choose image'}
+                            </button>
+                          </div>
+                        )}
+
+                        {modalConfig.coverMode === 'drive' && (
+                          <div className={styles.taskCoverPanel}>
+                            <input
+                              type="url"
+                              className={styles.taskCoverDriveInput}
+                              placeholder="https://drive.google.com/file/d/…"
+                              value={modalConfig.coverImageUrl}
+                              onChange={e => {
+                                setModalConfig(prev => ({ ...prev, coverImageUrl: e.target.value }));
+                                setCoverPreviewError(false);
+                              }}
+                            />
+                            <p className={styles.taskCoverHint}>
+                              Paste a public Google Drive image link (Anyone with the link can view).
+                            </p>
+                          </div>
+                        )}
+
+                        {modalConfig.coverMode !== 'none' && modalConfig.coverImageUrl.trim() && (
+                          <div className={styles.taskCoverPreviewWrap}>
+                            {!coverPreviewError ? (
+                              <img
+                                src={getDisplayImageUrl(modalConfig.coverImageUrl)}
+                                alt="Cover preview"
+                                className={styles.taskCoverPreviewImg}
+                                onError={() => setCoverPreviewError(true)}
+                              />
+                            ) : (
+                              <div className={styles.taskCoverPreviewError}>
+                                Preview unavailable — check the link or sharing settings.
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <>
