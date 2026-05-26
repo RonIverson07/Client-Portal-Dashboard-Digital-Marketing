@@ -111,6 +111,7 @@ export default function SpacesPage() {
   const [tableAssigneeFilter, setTableAssigneeFilter] = useState<string>('All');
   const [tableStatusFilter, setTableStatusFilter] = useState<string>('All');
   const [tablePriorityFilter, setTablePriorityFilter] = useState<string>('All');
+  const [listStatusFilter, setListStatusFilter] = useState<string>('All');
   const [followedTaskIds, setFollowedTaskIds] = useState<string[]>([]);
   const [dismissedActivityIds, setDismissedActivityIds] = useState<string[]>([]);
   const [mindMapParents, setMindMapParents] = useState<Record<string, string>>({});
@@ -127,6 +128,22 @@ export default function SpacesPage() {
   const editingTaskIdRef = useRef<string | null>(null);
 
   const [expandedTeamStatuses, setExpandedTeamStatuses] = useState<Record<string, boolean>>({});
+
+  // Confirmation dialog state (replaces native confirm())
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  }>({ isOpen: false, title: '', message: '', onConfirm: () => {} });
+
+  const showConfirmDialog = (title: string, message: string, onConfirm: () => void) => {
+    setConfirmDialog({ isOpen: true, title, message, onConfirm });
+  };
+
+  const closeConfirmDialog = () => {
+    setConfirmDialog({ isOpen: false, title: '', message: '', onConfirm: () => {} });
+  };
 
   const tabsScrollRef = useRef<HTMLDivElement>(null);
 
@@ -621,19 +638,27 @@ export default function SpacesPage() {
   };
 
   const handleMindMapDeleteTask = async (taskId: string) => {
-    if (!confirm('Delete this task?')) return;
-    try {
-      const res = await fetch(`/api/admin/project-tasks?id=${encodeURIComponent(taskId)}`, { method: 'DELETE' });
-      if (!res.ok) {
-        const err = await res.json();
-        showToast(err.error || 'Failed to delete task', 'error');
-        return;
+    const task = tasks.find(t => t.id === taskId);
+    const taskName = task?.title || 'this task';
+    showConfirmDialog(
+      'Delete Task',
+      `Are you sure you want to delete "${taskName}"? This action cannot be undone.`,
+      async () => {
+        closeConfirmDialog();
+        try {
+          const res = await fetch(`/api/admin/project-tasks?id=${encodeURIComponent(taskId)}`, { method: 'DELETE' });
+          if (!res.ok) {
+            const err = await res.json();
+            showToast(err.error || 'Failed to delete task', 'error');
+            return;
+          }
+          performDelete('task', taskId);
+          showToast('Task deleted');
+        } catch {
+          showToast('Failed to delete task', 'error');
+        }
       }
-      performDelete('task', taskId);
-      showToast('Task deleted');
-    } catch {
-      showToast('Failed to delete task', 'error');
-    }
+    );
   };
 
   const handleModalSubmit = async (e: React.FormEvent) => {
@@ -1790,8 +1815,22 @@ export default function SpacesPage() {
             )}
 
             {activeItem && activeView === 'list' && (
-              <div className={styles.listViewContainer}>
-                {statuses.map(status => {
+              <>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px' }}>
+                  <select
+                    className={styles.filterSelect}
+                    value={listStatusFilter}
+                    onChange={e => setListStatusFilter(e.target.value)}
+                    style={{ width: '160px' }}
+                  >
+                    <option value="All">All Statuses</option>
+                    {statuses.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+
+                <div className={styles.listViewContainer}>
+
+                {statuses.filter(s => listStatusFilter === 'All' || s === listStatusFilter).map(status => {
                   const colTasks = currentTasks.filter(t => t.status === status);
                   const { color: statusColor, bg: statusBg } = getStatusStyles(status);
 
@@ -1875,6 +1914,7 @@ export default function SpacesPage() {
                   );
                 })}
               </div>
+              </>
             )}
 
             {activeItem && activeView === 'calendar' && (
@@ -2187,7 +2227,7 @@ export default function SpacesPage() {
                         if (tablePriorityFilter !== 'All' && (task.priority || 'Normal') !== tablePriorityFilter) return false;
                         return true;
                       }).map((task, index) => (
-                        <tr key={task.id}>
+                        <tr key={task.id} style={{ cursor: 'pointer', transition: 'background 0.15s' }} onClick={() => openModal('Rename', task.id, 'task', task.title, task)} onMouseEnter={e => (e.currentTarget.style.background = '#f8fafc')} onMouseLeave={e => (e.currentTarget.style.background = '')}>
                           <td style={{ color: '#94a3b8', fontSize: '11px' }}>{index + 1}</td>
                           <td>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -2452,7 +2492,10 @@ export default function SpacesPage() {
                                             className={styles.teamTaskItem}
                                             onClick={(e) => { e.stopPropagation(); openModal('Rename', task.id, 'task', task.title, task); }}
                                           >
-                                            <div className={styles.teamTaskIcon} />
+                                            <div 
+                                              className={styles.teamTaskIcon} 
+                                              style={{ color: getStatusStyles(status).color }}
+                                            />
                                             <span className={styles.teamTaskTitle}>{task.title}</span>
                                           </div>
                                         ))}
@@ -2836,7 +2879,13 @@ export default function SpacesPage() {
               <div className={`${styles.modalBody} ${(modalConfig.type === 'Task' || (modalConfig.type === 'Rename' && modalConfig.targetType === 'task')) ? styles.taskModalBody : ''}`}>
                 {modalConfig.type === 'Delete' ? (
                   <div style={{ color: '#64748b', fontSize: '14px', lineHeight: '1.5' }}>
-                    Are you sure you want to delete this {modalConfig.targetType}? This action cannot be undone and will remove all nested items.
+                    {modalConfig.targetType === 'task' ? (
+                      (selectedTaskIds.size > 1 && selectedTaskIds.has(modalConfig.targetId!))
+                        ? `Are you sure you want to delete the ${selectedTaskIds.size} selected tasks? This action is permanent and cannot be undone.`
+                        : `Are you sure you want to delete this task? It will be permanently removed and cannot be restored.`
+                    ) : (
+                      `Are you sure you want to delete this ${modalConfig.targetType}? This action is permanent and will remove all nested items within it.`
+                    )}
                   </div>
                 ) : modalConfig.type === 'Archive' ? (
                   <div style={{ color: '#64748b', fontSize: '14px', lineHeight: '1.5' }}>
@@ -3479,6 +3528,46 @@ export default function SpacesPage() {
           }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" /></svg>
             Delete view
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Dialog (replaces native confirm()) */}
+      {confirmDialog.isOpen && (
+        <div className={styles.modalOverlay} onClick={closeConfirmDialog} style={{ zIndex: 1100 }}>
+          <div className={styles.modalContent} style={{ maxWidth: '380px' }} onClick={e => e.stopPropagation()}>
+            <div className={styles.modalHeader}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: '#fef2f2', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                    <line x1="12" y1="9" x2="12" y2="13" />
+                    <line x1="12" y1="17" x2="12.01" y2="17" />
+                  </svg>
+                </div>
+                <div className={styles.modalTitle} style={{ fontSize: '16px' }}>{confirmDialog.title}</div>
+              </div>
+              <button type="button" className={styles.closeBtn} onClick={closeConfirmDialog}>×</button>
+            </div>
+            <div className={styles.modalBody}>
+              <div style={{ color: '#64748b', fontSize: '14px', lineHeight: '1.6' }}>
+                {confirmDialog.message}
+              </div>
+            </div>
+            <div className={styles.modalFooter}>
+              <div></div>
+              <div className={styles.modalFooterRight}>
+                <button type="button" className={styles.cancelBtn} onClick={closeConfirmDialog}>Cancel</button>
+                <button
+                  type="button"
+                  className={styles.submitBtn}
+                  style={{ background: '#ef4444' }}
+                  onClick={confirmDialog.onConfirm}
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
