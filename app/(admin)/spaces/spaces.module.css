@@ -333,11 +333,13 @@
 }
 
 .taskCardCover {
+  position: relative;
   margin: -4px -4px 4px;
   border-radius: 6px;
   overflow: hidden;
   background: #f1f5f9;
   max-height: 120px;
+  min-height: 120px;
 }
 
 .taskCardDescription {
@@ -466,6 +468,8 @@
 }
 
 .taskCoverPreviewWrap {
+  position: relative;
+  min-height: 160px;
   margin-top: 12px;
   border-radius: 8px;
   overflow: hidden;

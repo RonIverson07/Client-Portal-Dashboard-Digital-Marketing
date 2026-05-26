@@ -10,7 +10,9 @@ import {
   sumHoursInRange,
   toDateKey,
 } from '@/lib/workloadUtils';
-import { canPreviewTaskCover, getDisplayImageUrl, isGoogleDriveUrl } from '@/lib/imageUtils';
+import { TaskImageCarousel } from '@/components/TaskImageCarousel';
+import { isGoogleDriveFolderUrl, isGoogleDriveUrl } from '@/lib/imageUtils';
+import { getTaskImages } from '@/lib/taskImages';
 
 type TaskCoverMode = 'none' | 'image' | 'drive';
 
@@ -42,6 +44,7 @@ interface SpaceTask {
   is_mind_map_step?: boolean;
   timeEstimateHours?: number | null;
   coverImageUrl?: string | null;
+  imageUrls?: string[] | null;
 }
 
 interface ActivityLog {
@@ -134,6 +137,7 @@ export default function SpacesPage() {
   const [dismissedActivityIds, setDismissedActivityIds] = useState<string[]>([]);
   const [mindMapParents, setMindMapParents] = useState<Record<string, string>>({});
   const [uploadingCover, setUploadingCover] = useState(false);
+  const [resolvingCoverFolder, setResolvingCoverFolder] = useState(false);
   const [coverPreviewError, setCoverPreviewError] = useState(false);
   const coverFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -281,6 +285,12 @@ export default function SpacesPage() {
       parentTaskId,
       is_mind_map_step: !!(t.is_mind_map_step || parentTaskId || parentLinks[t.id]),
       coverImageUrl: (t.cover_image_url ?? t.coverImageUrl ?? null) as string | null,
+      imageUrls: (() => {
+        const raw = t.image_urls ?? t.imageUrls;
+        return Array.isArray(raw)
+          ? raw.filter((x: unknown): x is string => typeof x === 'string' && !!x.trim())
+          : null;
+      })(),
     };
   };
 
@@ -409,6 +419,7 @@ export default function SpacesPage() {
     startDate: string;
     timeEstimate: string;
     coverImageUrl: string;
+    coverImageUrls: string[];
     coverMode: TaskCoverMode;
     priority: 'Urgent' | 'High' | 'Normal' | 'Low' | 'Clear';
   }>({
@@ -421,6 +432,7 @@ export default function SpacesPage() {
     startDate: '',
     timeEstimate: '',
     coverImageUrl: '',
+    coverImageUrls: [],
     coverMode: 'none',
     priority: 'Normal',
   });
@@ -445,10 +457,22 @@ export default function SpacesPage() {
       })(),
       priority: initialData.priority || 'Normal',
       coverImageUrl: String(initialData.coverImageUrl ?? initialData.cover_image_url ?? '').trim(),
+      coverImageUrls: (() => {
+        const raw = initialData.imageUrls ?? initialData.image_urls;
+        return Array.isArray(raw)
+          ? raw.filter((x: unknown): x is string => typeof x === 'string' && !!x.trim())
+          : [];
+      })(),
       coverMode: (() => {
         const url = String(initialData.coverImageUrl ?? initialData.cover_image_url ?? '').trim();
-        if (!url) return 'none' as TaskCoverMode;
-        return isGoogleDriveUrl(url) ? 'drive' : 'image';
+        const gallery = Array.isArray(initialData.imageUrls ?? initialData.image_urls)
+          ? (initialData.imageUrls ?? initialData.image_urls).filter(
+              (x: unknown) => typeof x === 'string' && !!String(x).trim()
+            )
+          : [];
+        if (!url && gallery.length === 0) return 'none' as TaskCoverMode;
+        if (gallery.length > 0 || isGoogleDriveUrl(url)) return 'drive';
+        return 'image';
       })(),
     });
     setCoverPreviewError(false);
@@ -475,6 +499,7 @@ export default function SpacesPage() {
   const closeModal = () => {
     setModalConfig({ ...modalConfig, isOpen: false });
     setUploadingCover(false);
+    setResolvingCoverFolder(false);
     setCoverPreviewError(false);
     setChecklistItems([]);
     setChecklistInput('');
@@ -567,6 +592,7 @@ export default function SpacesPage() {
         ...prev,
         coverMode: 'image',
         coverImageUrl: data.url,
+        coverImageUrls: [],
       }));
       setCoverPreviewError(false);
       showToast('Image attached');
@@ -584,8 +610,52 @@ export default function SpacesPage() {
       ...prev,
       coverMode: mode,
       coverImageUrl: mode === 'none' || mode !== prev.coverMode ? '' : prev.coverImageUrl,
+      coverImageUrls: mode === 'none' || mode !== prev.coverMode ? [] : prev.coverImageUrls,
     }));
     setCoverPreviewError(false);
+  };
+
+  async function resolveDriveFolderImages(folderUrl: string): Promise<string[]> {
+    const res = await fetch(`/api/admin/drive/folder-images?url=${encodeURIComponent(folderUrl)}`, {
+      credentials: 'include',
+      cache: 'no-store',
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to load folder images');
+    return Array.isArray(data.imageUrls) ? data.imageUrls : [];
+  }
+
+  async function handleCoverDriveBlur() {
+    const rawUrl = modalConfig.coverImageUrl.trim();
+    if (!isGoogleDriveFolderUrl(rawUrl)) return;
+
+    setResolvingCoverFolder(true);
+    setCoverPreviewError(false);
+    try {
+      const folderImages = await resolveDriveFolderImages(rawUrl);
+      if (folderImages.length === 0) {
+        setModalConfig(prev => ({ ...prev, coverImageUrls: [] }));
+        setCoverPreviewError(true);
+        showToast('No public images found in this Google Drive folder.', 'error');
+        return;
+      }
+      setModalConfig(prev => ({ ...prev, coverImageUrls: folderImages }));
+      setCoverPreviewError(false);
+    } catch (err: unknown) {
+      setModalConfig(prev => ({ ...prev, coverImageUrls: [] }));
+      setCoverPreviewError(true);
+      const message = err instanceof Error ? err.message : 'Failed to read Drive folder';
+      showToast(message, 'error');
+    } finally {
+      setResolvingCoverFolder(false);
+    }
+  }
+
+  const getModalCoverImages = (): string[] => {
+    const gallery = modalConfig.coverImageUrls.filter(Boolean);
+    if (gallery.length > 0) return gallery;
+    const single = modalConfig.coverImageUrl.trim();
+    return single ? [single] : [];
   };
 
   const resolveMindMapDefaultListId = (): string | null => {
@@ -681,12 +751,58 @@ export default function SpacesPage() {
 
   const handleModalSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const { type, targetId, targetType, inputValue, moveTargetId, description, assignee, dueDate, startDate, timeEstimate, coverImageUrl, coverMode, priority } = modalConfig;
+    const {
+      type,
+      targetId,
+      targetType,
+      inputValue,
+      moveTargetId,
+      description,
+      assignee,
+      dueDate,
+      startDate,
+      timeEstimate,
+      coverImageUrl,
+      coverImageUrls,
+      coverMode,
+      priority,
+    } = modalConfig;
     const isEditTask = type === 'Rename' && targetType === 'task';
-    const resolvedCoverUrl =
-      isEditTask && coverMode !== 'none' && coverImageUrl.trim()
-        ? coverImageUrl.trim()
-        : null;
+    let resolvedCoverUrl: string | null = null;
+    let resolvedImageUrls: string[] | null = null;
+
+    if (isEditTask && coverMode !== 'none' && coverImageUrl.trim()) {
+      const rawUrl = coverImageUrl.trim();
+      const gallery = coverImageUrls.filter(Boolean);
+
+      if (coverMode === 'drive' && isGoogleDriveFolderUrl(rawUrl)) {
+        let images = gallery;
+        if (images.length === 0) {
+          try {
+            images = await resolveDriveFolderImages(rawUrl);
+          } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : 'Failed to read Drive folder';
+            showToast(message, 'error');
+            return;
+          }
+        }
+        if (images.length === 0) {
+          showToast('No public images found in this Google Drive folder.', 'error');
+          return;
+        }
+        resolvedImageUrls = images;
+        resolvedCoverUrl = images[0];
+      } else if (gallery.length > 1) {
+        resolvedImageUrls = gallery;
+        resolvedCoverUrl = gallery[0];
+      } else {
+        resolvedCoverUrl = rawUrl;
+        resolvedImageUrls = null;
+      }
+    } else if (isEditTask && coverMode === 'none') {
+      resolvedCoverUrl = null;
+      resolvedImageUrls = null;
+    }
     const parsedTimeEstimate = timeEstimate.trim() ? parseFloat(timeEstimate) : null;
     const timeEstimateHours =
       parsedTimeEstimate != null && !isNaN(parsedTimeEstimate) && parsedTimeEstimate > 0
@@ -849,7 +965,9 @@ export default function SpacesPage() {
               ? 'Add time_estimate_hours column in Supabase (see time_estimate_hours.sql), then try again.'
               : msg.includes('cover_image_url')
                 ? 'Add cover_image_url column in Supabase (see cover_image_url.sql), then try again.'
-                : msg,
+                : msg.includes('image_urls')
+                  ? 'Add image_urls column in Supabase (see project_task_image_urls.sql), then try again.'
+                  : msg,
             'error'
           );
         }
@@ -866,6 +984,7 @@ export default function SpacesPage() {
           body.time_estimate_hours = timeEstimateHours;
           body.priority = priority;
           body.cover_image_url = resolvedCoverUrl;
+          body.image_urls = resolvedImageUrls;
         } else {
           body.type = targetType;
           body.name = inputValue;
@@ -894,6 +1013,7 @@ export default function SpacesPage() {
                 ...mapped,
                 timeEstimateHours: mapped.timeEstimateHours ?? timeEstimateHours,
                 coverImageUrl: mapped.coverImageUrl ?? resolvedCoverUrl,
+                imageUrls: mapped.imageUrls ?? resolvedImageUrls,
               };
             }));
             showToast('Task updated successfully');
@@ -908,7 +1028,9 @@ export default function SpacesPage() {
               ? 'Add time_estimate_hours column in Supabase (see time_estimate_hours.sql), then try again.'
               : msg.includes('cover_image_url')
                 ? 'Add cover_image_url column in Supabase (see cover_image_url.sql), then try again.'
-                : msg,
+                : msg.includes('image_urls')
+                  ? 'Add image_urls column in Supabase (see project_task_image_urls.sql), then try again.'
+                  : msg,
             'error'
           );
         }
@@ -1018,6 +1140,7 @@ export default function SpacesPage() {
           start_date: task.startDate || null,
           time_estimate_hours: task.timeEstimateHours ?? null,
           cover_image_url: task.coverImageUrl ?? null,
+          image_urls: task.imageUrls?.length ? task.imageUrls : null,
           priority: task.priority || 'Normal'
         })
       });
@@ -1753,15 +1876,12 @@ export default function SpacesPage() {
                           onDragStart={(e) => handleDragStart(e, task.id)}
                           onContextMenu={(e) => handleContextMenu(e, 'task', task.id)}
                         >
-                          {canPreviewTaskCover(task.coverImageUrl) && (
+                          {getTaskImages(task).length > 0 && (
                             <div className={styles.taskCardCover}>
-                              <img
-                                src={getDisplayImageUrl(task.coverImageUrl!)}
+                              <TaskImageCarousel
+                                images={getTaskImages(task)}
                                 alt=""
                                 className={styles.taskCardCoverImg}
-                                onError={e => {
-                                  (e.target as HTMLImageElement).style.display = 'none';
-                                }}
                               />
                             </div>
                           )}
@@ -3232,27 +3352,33 @@ export default function SpacesPage() {
                             <input
                               type="url"
                               className={styles.taskCoverDriveInput}
-                              placeholder="https://drive.google.com/file/d/…"
+                              placeholder="https://drive.google.com/file/d/… or …/folders/…"
                               value={modalConfig.coverImageUrl}
                               onChange={e => {
-                                setModalConfig(prev => ({ ...prev, coverImageUrl: e.target.value }));
+                                setModalConfig(prev => ({
+                                  ...prev,
+                                  coverImageUrl: e.target.value,
+                                  coverImageUrls: [],
+                                }));
                                 setCoverPreviewError(false);
                               }}
+                              onBlur={() => void handleCoverDriveBlur()}
+                              disabled={resolvingCoverFolder}
                             />
                             <p className={styles.taskCoverHint}>
-                              Paste a public Google Drive image link (Anyone with the link can view).
+                              Paste a public Google Drive image or folder link (Anyone with the link can view).
+                              {resolvingCoverFolder ? ' Loading folder images…' : ''}
                             </p>
                           </div>
                         )}
 
-                        {modalConfig.coverMode !== 'none' && modalConfig.coverImageUrl.trim() && (
+                        {modalConfig.coverMode !== 'none' && getModalCoverImages().length > 0 && (
                           <div className={styles.taskCoverPreviewWrap}>
                             {!coverPreviewError ? (
-                              <img
-                                src={getDisplayImageUrl(modalConfig.coverImageUrl)}
+                              <TaskImageCarousel
+                                images={getModalCoverImages()}
                                 alt="Cover preview"
                                 className={styles.taskCoverPreviewImg}
-                                onError={() => setCoverPreviewError(true)}
                               />
                             ) : (
                               <div className={styles.taskCoverPreviewError}>

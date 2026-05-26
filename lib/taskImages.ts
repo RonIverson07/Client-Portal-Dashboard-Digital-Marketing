@@ -1,11 +1,20 @@
-/** Resolve task images: gallery (image_urls) or single image_url. */
+/** Resolve task images: gallery (image_urls) or single image/cover URL. */
 export function getTaskImages(task: {
   image_url?: string | null;
+  cover_image_url?: string | null;
+  coverImageUrl?: string | null;
   image_urls?: string[] | null;
+  imageUrls?: string[] | null;
 }): string[] {
-  const multi = Array.isArray(task.image_urls)
-    ? task.image_urls.filter((x): x is string => typeof x === 'string' && !!x.trim())
+  const multiSource = task.image_urls ?? task.imageUrls;
+  const multi = Array.isArray(multiSource)
+    ? multiSource.filter((x): x is string => typeof x === 'string' && !!x.trim())
     : [];
   if (multi.length > 0) return multi;
-  return task.image_url?.trim() ? [task.image_url.trim()] : [];
+  const single =
+    task.image_url?.trim() ||
+    task.cover_image_url?.trim() ||
+    task.coverImageUrl?.trim() ||
+    '';
+  return single ? [single] : [];
 }
