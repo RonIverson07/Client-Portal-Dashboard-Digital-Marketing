@@ -3,7 +3,11 @@
 import { useEffect, useState, useRef, Suspense } from 'react';
 import { useRouter } from 'next/navigation';
 import styles from './tasks.module.css';
-import { getDisplayImageUrl, isGoogleDriveUrl } from '@/lib/imageUtils';
+import {
+  getDisplayImageUrl,
+  isGoogleDriveFolderUrl,
+  isGoogleDriveUrl,
+} from '@/lib/imageUtils';
 
 interface Task {
   id: number;
@@ -11,6 +15,7 @@ interface Task {
   company_name: string;
   title: string;
   image_url: string;
+  image_urls?: string[] | null;
   caption: string;
   status: string;
   comment_count: number;
@@ -34,10 +39,84 @@ interface TaskFormData {
   client_id: string;
   title: string;
   image_url: string;
+  image_urls?: string[];
   caption: string;
 }
 
 const emptyForm: TaskFormData = { client_id: '', title: '', image_url: '', caption: '' };
+
+function getTaskImages(task: Pick<Task, 'image_url' | 'image_urls'>): string[] {
+  const multi = Array.isArray(task.image_urls)
+    ? task.image_urls.filter((x): x is string => typeof x === 'string' && !!x.trim())
+    : [];
+  if (multi.length > 0) return multi;
+  return task.image_url ? [task.image_url] : [];
+}
+
+function ImageCarousel({
+  images,
+  alt,
+  className,
+}: {
+  images: string[];
+  alt: string;
+  className: string;
+}) {
+  const [index, setIndex] = useState(0);
+  const safeImages = images.filter(Boolean);
+
+  useEffect(() => {
+    if (index >= safeImages.length) setIndex(0);
+  }, [index, safeImages.length]);
+
+  if (safeImages.length === 0) return null;
+
+  const hasNav = safeImages.length > 1;
+  const current = safeImages[index] || safeImages[0];
+
+  return (
+    <div className={styles.carouselWrap}>
+      <img
+        src={getDisplayImageUrl(current)}
+        alt={alt}
+        className={className}
+        onError={e => {
+          (e.target as HTMLImageElement).src =
+            'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="600" height="300"><rect fill="%23f3f4f6" width="600" height="300"/></svg>';
+        }}
+      />
+      {hasNav && (
+        <>
+          <button
+            type="button"
+            className={`${styles.carouselBtn} ${styles.carouselBtnPrev}`}
+            onClick={e => {
+              e.stopPropagation();
+              setIndex(prev => (prev - 1 + safeImages.length) % safeImages.length);
+            }}
+            aria-label="Previous image"
+          >
+            ‹
+          </button>
+          <button
+            type="button"
+            className={`${styles.carouselBtn} ${styles.carouselBtnNext}`}
+            onClick={e => {
+              e.stopPropagation();
+              setIndex(prev => (prev + 1) % safeImages.length);
+            }}
+            aria-label="Next image"
+          >
+            ›
+          </button>
+          <div className={styles.carouselCount}>
+            {index + 1}/{safeImages.length}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
 const STATUS_MAP: Record<string, { label: string; cls: string }> = {
   for_review: { label: 'For Review', cls: 'badge badge-review' },
@@ -90,9 +169,7 @@ function TaskDetailPanel({
       </div>
 
       <div className={styles.detailContent}>
-        <img src={getDisplayImageUrl(task.image_url)} alt={task.title} className={styles.detailImage}
-          onError={e => { (e.target as HTMLImageElement).style.visibility = 'hidden'; }}
-        />
+        <ImageCarousel images={getTaskImages(task)} alt={task.title} className={styles.detailImage} />
         
         <div className={styles.detailMeta}>
           <div className={styles.detailRow}>
@@ -164,9 +241,20 @@ function TasksContent() {
   const [toast, setToast] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
   const [imgPreviewError, setImgPreviewError] = useState(false);
+  const [resolvingFolder, setResolvingFolder] = useState(false);
   
   const [isOverCol, setIsOverCol] = useState<string | null>(null);
   const dragTaskId = useRef<number | null>(null);
+
+  async function resolveDriveFolderImages(folderUrl: string): Promise<string[]> {
+    const res = await fetch(`/api/admin/drive/folder-images?url=${encodeURIComponent(folderUrl)}`, {
+      credentials: 'include',
+      cache: 'no-store',
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Failed to read Google Drive folder.');
+    return Array.isArray(data.imageUrls) ? data.imageUrls : [];
+  }
 
   const handleDragStart = (e: React.DragEvent, id: number) => {
     dragTaskId.current = id;
@@ -232,9 +320,41 @@ function TasksContent() {
 
   function openEdit(task: Task) {
     setEditTask(task);
-    setForm({ client_id: String(task.client_id), title: task.title, image_url: task.image_url, caption: task.caption });
+    setForm({
+      client_id: String(task.client_id),
+      title: task.title,
+      image_url: task.image_url,
+      image_urls: Array.isArray(task.image_urls) ? task.image_urls : [],
+      caption: task.caption,
+    });
     setFormError('');
+    setImgPreviewError(false);
     setShowForm(true);
+  }
+
+  async function handleImageUrlBlur() {
+    const rawUrl = form.image_url.trim();
+    if (!isGoogleDriveFolderUrl(rawUrl)) return;
+
+    setFormError('');
+    setResolvingFolder(true);
+    try {
+      const folderImages = await resolveDriveFolderImages(rawUrl);
+      if (folderImages.length === 0) {
+        setFormError('No public images found in this Google Drive folder.');
+        setForm(f => ({ ...f, image_urls: [] }));
+        setImgPreviewError(true);
+        return;
+      }
+      setForm(f => ({ ...f, image_urls: folderImages }));
+      setImgPreviewError(false);
+    } catch (err: any) {
+      setFormError(err?.message || 'Failed to read Drive folder images.');
+      setForm(f => ({ ...f, image_urls: [] }));
+      setImgPreviewError(true);
+    } finally {
+      setResolvingFolder(false);
+    }
   }
 
   async function handleSave(e: React.FormEvent) {
@@ -243,11 +363,41 @@ function TasksContent() {
     setSaving(true);
 
     try {
+      const rawUrl = form.image_url.trim();
+      let resolvedImageUrl = rawUrl;
+      let resolvedImageUrls: string[] | undefined = undefined;
+
+      if (isGoogleDriveFolderUrl(rawUrl)) {
+        setResolvingFolder(true);
+        const folderImages = await resolveDriveFolderImages(rawUrl);
+        if (folderImages.length === 0) {
+          setFormError('No public images found in this Google Drive folder.');
+          return;
+        }
+        resolvedImageUrls = folderImages;
+        resolvedImageUrl = folderImages[0];
+      } else if (Array.isArray(form.image_urls) && form.image_urls.length > 0) {
+        resolvedImageUrls = form.image_urls.filter(Boolean);
+      }
+
       const url = editTask ? `/api/admin/tasks/${editTask.id}` : '/api/admin/tasks';
       const method = editTask ? 'PUT' : 'POST';
       const body = editTask
-        ? { client_id: Number(form.client_id), title: form.title, image_url: form.image_url, caption: form.caption, status: editTask.status }
-        : { client_id: Number(form.client_id), title: form.title, image_url: form.image_url, caption: form.caption };
+        ? {
+            client_id: Number(form.client_id),
+            title: form.title,
+            image_url: resolvedImageUrl,
+            image_urls: resolvedImageUrls,
+            caption: form.caption,
+            status: editTask.status,
+          }
+        : {
+            client_id: Number(form.client_id),
+            title: form.title,
+            image_url: resolvedImageUrl,
+            image_urls: resolvedImageUrls,
+            caption: form.caption,
+          };
 
       const res = await fetch(url, {
         method,
@@ -265,6 +415,7 @@ function TasksContent() {
     } catch {
       setFormError('An unexpected error occurred.');
     } finally {
+      setResolvingFolder(false);
       setSaving(false);
     }
   }
@@ -277,7 +428,13 @@ function TasksContent() {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify({ title: task.title, image_url: task.image_url, caption: task.caption, status }),
+      body: JSON.stringify({
+        title: task.title,
+        image_url: task.image_url,
+        image_urls: task.image_urls || null,
+        caption: task.caption,
+        status,
+      }),
     });
 
     if (res.ok) {
@@ -343,12 +500,7 @@ function TasksContent() {
             <div className={styles.mobileListView}>
               {filteredTasks.map(task => (
                 <div key={task.id} className={styles.mobileAdminCard} onClick={() => setSelectedTask(selectedTask?.id === task.id ? null : task)}>
-                  <img
-                    src={getDisplayImageUrl(task.image_url)}
-                    alt={task.title}
-                    className={styles.mobileAdminCardImg}
-                    onError={e => { (e.target as HTMLImageElement).src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="80" height="45"><rect fill="%23f3f4f6" width="80" height="45"/></svg>'; }}
-                  />
+                  <ImageCarousel images={getTaskImages(task)} alt={task.title} className={styles.mobileAdminCardImg} />
                   <div className={styles.mobileAdminCardBody}>
                     <div className={styles.mobileAdminCardRow}>
                       <StatusBadge status={task.status} />
@@ -418,11 +570,10 @@ function TasksContent() {
                         >
                           <div className={styles.taskCardInner} style={{ flexDirection: 'column', gap: 'var(--space-2)', padding: 'var(--space-3)' }}>
                             <div style={{ position: 'relative', width: '100%', height: 120, borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
-                              <img
-                                src={getDisplayImageUrl(task.image_url)}
+                              <ImageCarousel
+                                images={getTaskImages(task)}
                                 alt={task.title}
-                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                                onError={e => { (e.target as HTMLImageElement).src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="80" height="60" viewBox="0 0 80 60"><rect fill="%23f3f4f6" width="80" height="60"/></svg>'; }}
+                                className={styles.boardCardImage}
                               />
                             </div>
                             <div className={styles.taskInfo} style={{ width: '100%' }}>
@@ -482,33 +633,40 @@ function TasksContent() {
               </div>
               <div className="form-group">
                 <label>Image URL or Google Drive Link *</label>
-                <input value={form.image_url} onChange={e => { setForm(f => ({ ...f, image_url: e.target.value })); setImgPreviewError(false); }} placeholder="https://… or Google Drive share link" required />
+                <input
+                  value={form.image_url}
+                  onChange={e => {
+                    setForm(f => ({ ...f, image_url: e.target.value, image_urls: [] }));
+                    setImgPreviewError(false);
+                  }}
+                  onBlur={handleImageUrlBlur}
+                  placeholder="https://… , Google Drive file link, or Drive folder link"
+                  required
+                />
                 <small style={{ color: 'var(--color-text-muted)', fontSize: 11, lineHeight: 1.5 }}>
-                  You can paste a public Google Drive image link here.
-                  {isGoogleDriveUrl(form.image_url) && ' Make sure the file is shared as \'Anyone with the link can view.\''}
+                  Works with single image links and Google Drive folder links.
+                  {isGoogleDriveUrl(form.image_url) && " Make sure it is shared as 'Anyone with the link can view.'"}
                 </small>
+                {resolvingFolder && (
+                  <div className="text-muted" style={{ marginTop: 8, fontSize: 12 }}>
+                    Reading Google Drive folder images...
+                  </div>
+                )}
                 {form.image_url && (
                   <div style={{ marginTop: 8 }}>
                     {!imgPreviewError ? (
-                      <img
-                        key={form.image_url}
-                        src={getDisplayImageUrl(form.image_url)}
+                      <ImageCarousel
+                        images={
+                          Array.isArray(form.image_urls) && form.image_urls.length > 0
+                            ? form.image_urls
+                            : [form.image_url]
+                        }
                         alt="Preview"
-                        style={{ display: 'block', maxHeight: 160, width: '100%', borderRadius: 6, objectFit: 'cover', border: '1px solid var(--color-border)' }}
-                        onError={(e) => {
-                          const fileId = form.image_url.match(/\/file\/d\/([a-zA-Z0-9_-]{10,})/)?.[1];
-                          const target = e.target as HTMLImageElement;
-                          // If primary fails, try secondary UC format
-                          if (fileId && !target.src.includes('uc?export=view')) {
-                            target.src = `https://drive.google.com/uc?export=view&id=${fileId}`;
-                          } else {
-                            setImgPreviewError(true);
-                          }
-                        }}
+                        className={styles.formPreviewImage}
                       />
                     ) : (
                       <div style={{ padding: '12px', background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: 6, fontSize: 12, color: '#92400e', lineHeight: 1.5 }}>
-                        <strong>Note:</strong> Preview couldn&apos;t load. This happens sometimes with Google Drive, but you can still create the task and it may load on the board.
+                        <strong>Note:</strong> Preview could not load. Check your Google Drive sharing and that the folder contains public image files.
                       </div>
                     )}
                   </div>
@@ -520,8 +678,8 @@ function TasksContent() {
               </div>
               <div className={styles.modalFooter}>
                 <button type="button" className="btn btn-ghost" onClick={() => setShowForm(false)}>Cancel</button>
-                <button type="submit" className="btn btn-primary" disabled={saving}>
-                  {saving ? 'Saving…' : editTask ? 'Save Changes' : 'Create Task'}
+                <button type="submit" className="btn btn-primary" disabled={saving || resolvingFolder}>
+                  {resolvingFolder ? 'Reading folder…' : saving ? 'Saving…' : editTask ? 'Save Changes' : 'Create Task'}
                 </button>
               </div>
             </form>

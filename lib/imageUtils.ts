@@ -17,6 +17,21 @@ function extractGoogleDriveFileId(url: string): string | null {
   return null;
 }
 
+export function extractGoogleDriveFolderId(url: string): string | null {
+  if (!url) return null;
+  if (!url.includes('drive.google.com')) return null;
+
+  const folderPathMatch = url.match(/\/folders\/([a-zA-Z0-9_-]{10,})/);
+  if (folderPathMatch?.[1]) return folderPathMatch[1];
+
+  const idParamMatch = url.match(/[?&]id=([a-zA-Z0-9_-]{10,})/);
+  if (idParamMatch?.[1] && (url.includes('/folders') || url.includes('drive/folders'))) {
+    return idParamMatch[1];
+  }
+
+  return null;
+}
+
 /**
  * Converts any Google Drive share/view/open/uc link into a direct image URL
  * that loads reliably in browsers without extra redirects.
@@ -42,6 +57,10 @@ export function getDisplayImageUrl(url: string): string {
 
 export function isGoogleDriveUrl(url: string): boolean {
   return !!(url && (url.includes('drive.google.com') || url.includes('drive.usercontent.google.com')));
+}
+
+export function isGoogleDriveFolderUrl(url: string): boolean {
+  return !!extractGoogleDriveFolderId(url);
 }
 
 /** Whether a task cover URL can show as a board thumbnail. */

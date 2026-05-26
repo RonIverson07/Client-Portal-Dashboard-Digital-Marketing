@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
   if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
-    const { client_id, title, image_url, caption } = await req.json();
+    const { client_id, title, image_url, image_urls, caption } = await req.json();
 
     if (!client_id) return NextResponse.json({ error: 'Client is required.' }, { status: 400 });
     if (!title?.trim()) return NextResponse.json({ error: 'Title is required.' }, { status: 400 });
@@ -76,7 +76,8 @@ export async function POST(req: NextRequest) {
         { 
           client_id, 
           title: title.trim(), 
-          image_url: image_url.trim(), 
+          image_url: image_url.trim(),
+          image_urls: Array.isArray(image_urls) ? image_urls : null,
           caption: caption.trim(), 
           status: 'for_review', 
           created_by: admin.id 

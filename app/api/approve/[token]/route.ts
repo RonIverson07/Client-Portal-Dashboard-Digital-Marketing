@@ -20,7 +20,7 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
   const { data: allTasks, error: tasksError } = await supabase
     .from('tasks')
     .select(`
-      id, client_id, title, image_url, caption, status, created_at, updated_at,
+      id, client_id, title, image_url, image_urls, caption, status, created_at, updated_at,
       comments (count)
     `)
     .neq('status', 'published');

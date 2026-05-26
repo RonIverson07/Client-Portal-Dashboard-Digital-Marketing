@@ -4,6 +4,8 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import styles from './approve.module.css';
 import { getDisplayImageUrl } from '@/lib/imageUtils';
+import { getTaskImages } from '@/lib/taskImages';
+import { TaskImageCarousel } from '@/components/TaskImageCarousel';
 
 /** Normalize captions that may contain literal \n strings */
 function normalizeCaption(text: string): string {
@@ -12,7 +14,17 @@ function normalizeCaption(text: string): string {
 }
 
 interface ClientInfo { id: number; company_name: string; contact_name: string | null; logo_url: string | null; }
-interface Task { id: number; title: string; image_url: string; caption: string; status: string; comment_count: number; created_at: string; updated_at: string; }
+interface Task {
+  id: number;
+  title: string;
+  image_url: string;
+  image_urls?: string[] | null;
+  caption: string;
+  status: string;
+  comment_count: number;
+  created_at: string;
+  updated_at: string;
+}
 interface Comment { id: number; author_name: string; comment_text: string; created_at: string; }
 
 function getStatusLabel(s: string): string {
@@ -25,23 +37,65 @@ function StatusBadge({ status }: { status: string }) {
 }
 function formatDate(d: string) { return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); }
 
-/* ── Zoomable Image Modal ── */
-function ZoomableImageModal({ src, alt, onClose }: { src: string; alt: string; onClose: () => void }) {
+/* ── Zoomable Image Modal (single or carousel) ── */
+function ZoomableImageModal({
+  images,
+  initialIndex = 0,
+  alt,
+  onClose,
+}: {
+  images: string[];
+  initialIndex?: number;
+  alt: string;
+  onClose: () => void;
+}) {
+  const safeImages = images.filter(Boolean);
+  const [index, setIndex] = useState(initialIndex);
   const [scale, setScale] = useState(1);
   const [pos, setPos] = useState({ x: 0, y: 0 });
   const dragging = useRef(false);
   const dragStart = useRef({ x: 0, y: 0 });
   const posStart = useRef({ x: 0, y: 0 });
-  const displaySrc = getDisplayImageUrl(src);
+  const currentSrc = getDisplayImageUrl(safeImages[index] || safeImages[0] || '');
+  const hasNav = safeImages.length > 1;
 
   useEffect(() => {
-    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    setIndex(Math.min(initialIndex, Math.max(0, safeImages.length - 1)));
+    setScale(1);
+    setPos({ x: 0, y: 0 });
+  }, [initialIndex, safeImages.length]);
+
+  function reset() { setScale(1); setPos({ x: 0, y: 0 }); }
+
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+      if (e.key === 'ArrowLeft' && hasNav) {
+        setIndex(prev => (prev - 1 + safeImages.length) % safeImages.length);
+        reset();
+      }
+      if (e.key === 'ArrowRight' && hasNav) {
+        setIndex(prev => (prev + 1) % safeImages.length);
+        reset();
+      }
+    };
     document.addEventListener('keydown', h);
     return () => document.removeEventListener('keydown', h);
-  }, [onClose]);
+  }, [onClose, hasNav, safeImages.length]);
+
+  function goPrev(e?: React.MouseEvent) {
+    e?.stopPropagation();
+    setIndex(prev => (prev - 1 + safeImages.length) % safeImages.length);
+    reset();
+  }
+
+  function goNext(e?: React.MouseEvent) {
+    e?.stopPropagation();
+    setIndex(prev => (prev + 1) % safeImages.length);
+    reset();
+  }
 
   function zoom(delta: number) { setScale(s => Math.min(5, Math.max(0.25, s + delta))); }
-  function reset() { setScale(1); setPos({ x: 0, y: 0 }); }
 
   function onWheel(e: React.WheelEvent) {
     e.preventDefault();
@@ -70,12 +124,29 @@ function ZoomableImageModal({ src, alt, onClose }: { src: string; alt: string; o
         <button className={styles.zoomBtn} onClick={() => zoom(-0.3)} title="Zoom out">－</button>
         <button className={styles.zoomBtn} onClick={reset} title="Reset zoom" style={{ fontSize: 11 }}>Reset</button>
       </div>
+      {hasNav && (
+        <>
+          <button type="button" className={`${styles.modalNavBtn} ${styles.modalNavPrev}`} onClick={goPrev} aria-label="Previous image">
+            ‹
+          </button>
+          <button type="button" className={`${styles.modalNavBtn} ${styles.modalNavNext}`} onClick={goNext} aria-label="Next image">
+            ›
+          </button>
+          <div className={styles.modalImageCount}>
+            {index + 1} / {safeImages.length}
+          </div>
+        </>
+      )}
       <div className={styles.imageViewport}
         onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseUp={onMouseUp} onMouseLeave={onMouseUp}
         onWheel={onWheel}
         style={{ cursor: scale > 1 ? (dragging.current ? 'grabbing' : 'grab') : 'default', touchAction: 'pinch-zoom' }}
       >
-        <img src={displaySrc} alt={alt} className={styles.imagePreviewFull}
+        <img
+          key={currentSrc}
+          src={currentSrc}
+          alt={alt}
+          className={styles.imagePreviewFull}
           style={{ transform: `translate(${pos.x}px, ${pos.y}px) scale(${scale})`, transformOrigin: 'center' }}
           draggable={false}
           onError={e => { (e.target as HTMLImageElement).alt = 'Image unavailable — check sharing settings'; }}
@@ -137,10 +208,11 @@ function TaskDetailModal({ task, token, onClose, onStatusChange, onCommentAdded 
   const [commentText, setCommentText] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [showImg, setShowImg] = useState(false);
+  const [previewIndex, setPreviewIndex] = useState(0);
   const [showRevModal, setShowRevModal] = useState(false);
   const [statusLoading, setStatusLoading] = useState<string | null>(null);
   const [toast, setToast] = useState('');
-  const displayImg = getDisplayImageUrl(task.image_url);
+  const taskImages = getTaskImages(task);
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => { if (e.key === 'Escape' && !showRevModal && !showImg) onClose(); };
@@ -156,16 +228,16 @@ function TaskDetailModal({ task, token, onClose, onStatusChange, onCommentAdded 
   function showToast(msg: string) { setToast(msg); setTimeout(() => setToast(''), 2500); }
 
   async function doStatusUpdate(status: string, commentTxt?: string) {
-    await fetch(`/api/approve/${token}/tasks/${task.id}`, { 
-      method: 'PATCH', 
-      headers: { 'Content-Type': 'application/json' }, 
-      body: JSON.stringify({ status, comment: commentTxt }) 
+    await fetch(`/api/approve/${token}/tasks/${task.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status, comment: commentTxt })
     });
-    
+
     onStatusChange(task.id, status);
-    if (commentTxt) { 
-      onCommentAdded(task.id); 
-      fetch(`/api/approve/${token}/tasks/${task.id}/comments`).then(r => r.json()).then(d => setComments(d.comments || [])); 
+    if (commentTxt) {
+      onCommentAdded(task.id);
+      fetch(`/api/approve/${token}/tasks/${task.id}/comments`).then(r => r.json()).then(d => setComments(d.comments || []));
     }
   }
 
@@ -190,9 +262,17 @@ function TaskDetailModal({ task, token, onClose, onStatusChange, onCommentAdded 
             <button className="btn btn-ghost btn-sm" onClick={onClose}>✕ Close</button>
           </div>
           <div className={styles.detailModalBody}>
-            <div className={styles.detailImgWrap} onClick={() => setShowImg(true)}>
-              <img src={displayImg} alt={task.title} className={styles.detailImg}
-                onError={e => { (e.target as HTMLImageElement).src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="600" height="300"><rect fill="%23f3f4f6" width="600" height="300"/><text fill="%239ca3af" font-family="sans-serif" font-size="13" x="50%" y="50%" text-anchor="middle" dy=".3em">Image unavailable — check sharing settings</text></svg>'; }} />
+            <div className={styles.detailImgWrap}>
+              <TaskImageCarousel
+                images={taskImages}
+                alt={task.title}
+                className={styles.detailImg}
+                onImageClick={idx => {
+                  setPreviewIndex(idx);
+                  setShowImg(true);
+                }}
+                showEnlargeHint
+              />
               <div className={styles.detailImgHint}>🔍 Click to enlarge</div>
             </div>
             <div>
@@ -227,7 +307,14 @@ function TaskDetailModal({ task, token, onClose, onStatusChange, onCommentAdded 
           </div>
         </div>
       </div>
-      {showImg && <ZoomableImageModal src={task.image_url} alt={task.title} onClose={() => setShowImg(false)} />}
+      {showImg && (
+        <ZoomableImageModal
+          images={taskImages}
+          initialIndex={previewIndex}
+          alt={task.title}
+          onClose={() => setShowImg(false)}
+        />
+      )}
       {showRevModal && <RevisionModal onSubmit={handleRevisionSubmit} onCancel={() => setShowRevModal(false)} />}
       {toast && <div className="toast-container"><div className="toast toast-success">{toast}</div></div>}
     </>
@@ -240,14 +327,15 @@ function ApprovalCard({ task, token, onStatusChange, onCommentAdded, onOpenDetai
   onStatusChange: (id: number, status: string) => void;
   onCommentAdded: (id: number) => void;
   onOpenDetail: (task: Task) => void;
-  onOpenImage: (task: Task) => void;
+  onOpenImage: (task: Task, imageIndex?: number) => void;
   onDragStart: (e: React.DragEvent, taskId: number) => void;
 }) {
   const [showRevModal, setShowRevModal] = useState(false);
   const [loading, setLoading] = useState<string | null>(null);
   const [toast, setToast] = useState('');
   const isDragging = useRef(false);
-  const displayImg = getDisplayImageUrl(task.image_url);
+  const imageIndexRef = useRef(0);
+  const taskImages = getTaskImages(task);
 
   function showToast(msg: string) { setToast(msg); setTimeout(() => setToast(''), 2500); }
 
@@ -279,10 +367,21 @@ function ApprovalCard({ task, token, onStatusChange, onCommentAdded, onOpenDetai
         onDragEnd={() => { setTimeout(() => { isDragging.current = false; }, 50); }}
         onClick={() => { if (!isDragging.current) onOpenDetail(task); }}
       >
-        <div className={styles.cardImgWrap} onClick={e => { e.stopPropagation(); onOpenImage(task); }} title="Click to enlarge">
-          <img src={displayImg} alt={task.title} className={styles.cardImg}
-            onError={e => { (e.target as HTMLImageElement).src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="220"><rect fill="%23f3f4f6" width="400" height="220"/><text fill="%239ca3af" font-family="sans-serif" font-size="13" x="50%" y="50%" text-anchor="middle" dy=".3em">Image unavailable</text></svg>'; }} />
-          <div className={styles.cardImgOverlay}><span style={{ fontSize: '20px' }}>🔍</span></div>
+        <div
+          className={styles.cardImgWrap}
+          onClick={e => e.stopPropagation()}
+          title="Click arrows to browse · click image to enlarge"
+        >
+          <TaskImageCarousel
+            images={taskImages}
+            alt={task.title}
+            className={styles.cardImg}
+            onIndexChange={i => { imageIndexRef.current = i; }}
+            onImageClick={idx => onOpenImage(task, idx)}
+          />
+          <div className={styles.cardImgOverlay} onClick={e => { e.stopPropagation(); onOpenImage(task, imageIndexRef.current); }} title="Enlarge">
+            <span style={{ fontSize: '20px' }}>🔍</span>
+          </div>
           <div className={styles.dragHint}>⠿ Drag to move</div>
         </div>
         <div className={styles.cardBody}>
@@ -323,7 +422,7 @@ function KanbanBoard({ tasks, token, onStatusChange, onCommentAdded, onOpenDetai
   onStatusChange: (id: number, status: string) => void;
   onCommentAdded: (id: number) => void;
   onOpenDetail: (task: Task) => void;
-  onOpenImage: (task: Task) => void;
+  onOpenImage: (task: Task, imageIndex?: number) => void;
 }) {
   const [dragOverCol, setDragOverCol] = useState<string | null>(null);
   const [pendingRevision, setPendingRevision] = useState<{ taskId: number } | null>(null);
@@ -351,10 +450,10 @@ function KanbanBoard({ tasks, token, onStatusChange, onCommentAdded, onOpenDetai
   async function handleRevisionFromDrop(text: string) {
     if (!pendingRevision) return;
     const { taskId } = pendingRevision; setPendingRevision(null);
-    await fetch(`/api/approve/${token}/tasks/${taskId}`, { 
-      method: 'PATCH', 
-      headers: { 'Content-Type': 'application/json' }, 
-      body: JSON.stringify({ status: 'for_revision', comment: text }) 
+    await fetch(`/api/approve/${token}/tasks/${taskId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'for_revision', comment: text })
     });
     onStatusChange(taskId, 'for_revision');
     onCommentAdded(taskId);
@@ -395,7 +494,7 @@ function MobileList({ tasks, token, onStatusChange, onCommentAdded, onOpenDetail
   onStatusChange: (id: number, status: string) => void;
   onCommentAdded: (id: number) => void;
   onOpenDetail: (task: Task) => void;
-  onOpenImage: (task: Task) => void;
+  onOpenImage: (task: Task, imageIndex?: number) => void;
 }) {
   const tabs = [
     { key: 'for_review', label: 'For Review' },
@@ -425,10 +524,10 @@ function MobileList({ tasks, token, onStatusChange, onCommentAdded, onOpenDetail
     if (!revTaskId) return;
     setShowRevModal(false);
     setLoadingId(revTaskId);
-    await fetch(`/api/approve/${token}/tasks/${revTaskId}`, { 
-      method: 'PATCH', 
-      headers: { 'Content-Type': 'application/json' }, 
-      body: JSON.stringify({ status: 'for_revision', comment: text }) 
+    await fetch(`/api/approve/${token}/tasks/${revTaskId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'for_revision', comment: text })
     });
     onStatusChange(revTaskId, 'for_revision');
     onCommentAdded(revTaskId);
@@ -460,14 +559,17 @@ function MobileList({ tasks, token, onStatusChange, onCommentAdded, onOpenDetail
           <div className={styles.mobileEmptyState}>No items in this status.</div>
         ) : shown.map(task => {
           const s = task.status;
-          const displayImg = getDisplayImageUrl(task.image_url);
+          const taskImages = getTaskImages(task);
           return (
             <div key={task.id} className={styles.mobileCard} onClick={() => onOpenDetail(task)}>
-              <div className={styles.mobileCardImgWrap}>
-                <img src={displayImg} alt={task.title} className={styles.mobileCardImg}
-                  onError={e => { (e.target as HTMLImageElement).src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="220"><rect fill="%23f3f4f6" width="400" height="220"/><text fill="%239ca3af" font-family="sans-serif" font-size="13" x="50%" y="50%" text-anchor="middle" dy=".3em">Image unavailable</text></svg>'; }}
+              <div className={styles.mobileCardImgWrap} onClick={e => e.stopPropagation()}>
+                <TaskImageCarousel
+                  images={taskImages}
+                  alt={task.title}
+                  className={styles.mobileCardImg}
+                  onImageClick={idx => onOpenImage(task, idx)}
                 />
-                <button className={styles.mobileCardEnlargeBtn} onClick={e => { e.stopPropagation(); onOpenImage(task); }} title="Enlarge image">🔍</button>
+                <button className={styles.mobileCardEnlargeBtn} onClick={e => { e.stopPropagation(); onOpenImage(task, 0); }} title="Enlarge image">🔍</button>
               </div>
               <div className={styles.mobileCardBody}>
                 <div className={styles.mobileCardTopRow}>
@@ -511,15 +613,16 @@ export default function ApprovalPage() {
   const [error, setError] = useState('');
   const [detailTask, setDetailTask] = useState<Task | null>(null);
   const [previewTask, setPreviewTask] = useState<Task | null>(null);
+  const [previewImageIndex, setPreviewImageIndex] = useState(0);
 
   const loadData = useCallback(() => {
     const ts = Date.now();
     fetch(`/api/approve/${token}?t=${ts}`, { cache: 'no-store' })
       .then(r => { if (!r.ok) throw new Error('Invalid'); return r.json(); })
-      .then(d => { 
+      .then(d => {
         console.log('DEBUG FRONTEND: Received tasks:', d.tasks);
-        setClient(d.client); 
-        setTasks(d.tasks || []); 
+        setClient(d.client);
+        setTasks(d.tasks || []);
       })
       .catch(() => setError('This approval link is invalid or has expired.'))
       .finally(() => setLoading(false));
@@ -573,16 +676,43 @@ export default function ApprovalPage() {
         ) : (
           <>
             <div className={styles.desktopBoard}>
-              <KanbanBoard tasks={tasks} token={token} onStatusChange={handleStatusChange} onCommentAdded={handleCommentAdded} onOpenDetail={setDetailTask} onOpenImage={setPreviewTask} />
+              <KanbanBoard
+                tasks={tasks}
+                token={token}
+                onStatusChange={handleStatusChange}
+                onCommentAdded={handleCommentAdded}
+                onOpenDetail={setDetailTask}
+                onOpenImage={(task, imageIndex = 0) => {
+                  setPreviewImageIndex(imageIndex);
+                  setPreviewTask(task);
+                }}
+              />
             </div>
             <div className={styles.mobileView}>
-              <MobileList tasks={tasks} token={token} onStatusChange={handleStatusChange} onCommentAdded={handleCommentAdded} onOpenDetail={setDetailTask} onOpenImage={setPreviewTask} />
+              <MobileList
+                tasks={tasks}
+                token={token}
+                onStatusChange={handleStatusChange}
+                onCommentAdded={handleCommentAdded}
+                onOpenDetail={setDetailTask}
+                onOpenImage={(task, imageIndex = 0) => {
+                  setPreviewImageIndex(imageIndex);
+                  setPreviewTask(task);
+                }}
+              />
             </div>
           </>
         )}
       </main>
       {detailTask && <TaskDetailModal task={detailTask} token={token} onClose={() => setDetailTask(null)} onStatusChange={handleStatusChange} onCommentAdded={handleCommentAdded} />}
-      {previewTask && <ZoomableImageModal src={previewTask.image_url} alt={previewTask.title} onClose={() => setPreviewTask(null)} />}
+      {previewTask && (
+        <ZoomableImageModal
+          images={getTaskImages(previewTask)}
+          initialIndex={previewImageIndex}
+          alt={previewTask.title}
+          onClose={() => setPreviewTask(null)}
+        />
+      )}
     </div>
   );
 }

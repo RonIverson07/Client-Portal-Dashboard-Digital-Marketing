@@ -50,7 +50,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
   if (!admin) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
-    const { client_id, title, image_url, caption, status } = await req.json();
+    const { client_id, title, image_url, image_urls, caption, status } = await req.json();
     console.log('--- TASK UPDATE DEBUG ---');
     console.log('Updating Task ID:', params.id);
     console.log('New Client ID received:', client_id);
@@ -79,6 +79,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
         client_id: client_id !== undefined ? Number(client_id) : current.client_id,
         title: title.trim(),
         image_url: image_url.trim(),
+        image_urls: Array.isArray(image_urls) ? image_urls : null,
         caption: caption.trim(),
         status: status || current.status,
         updated_at: new Date().toISOString()
