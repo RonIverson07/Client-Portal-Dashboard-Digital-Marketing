@@ -208,7 +208,10 @@ export default function SpacesPage() {
       const savedDismissed = localStorage.getItem('dismissed_activity_ids');
       if (savedDismissed) {
         try {
-          setDismissedActivityIds(JSON.parse(savedDismissed));
+          const parsed = JSON.parse(savedDismissed);
+          if (Array.isArray(parsed)) {
+            setDismissedActivityIds(parsed);
+          }
         } catch (e) {
           console.error('Failed to load dismissed activities', e);
         }
@@ -1082,7 +1085,7 @@ export default function SpacesPage() {
   };
 
   const dismissActivity = (logId: string) => {
-    setDismissedActivityIds(prev => [...prev, logId]);
+    setDismissedActivityIds(prev => prev.includes(logId) ? prev : [...prev, logId]);
     showToast('Activity cleared from Inbox');
   };
 
@@ -1590,7 +1593,8 @@ export default function SpacesPage() {
               {/* Notification Bell */}
               <div style={{ position: 'relative' }}>
                 {(() => {
-                  const dropdownReminderItems = tasks.filter(t => t.reminder_at).map(task => {
+                  const now = Date.now();
+                  const dropdownReminderItems = tasks.filter(t => t.reminder_at && new Date(t.reminder_at).getTime() <= now).map(task => {
                     const taskPath = getTaskPath(task);
                     return {
                       id: `reminder-${task.id}`,
@@ -3492,7 +3496,8 @@ export default function SpacesPage() {
 
                 <div className={styles.inboxList}>
                   {(() => {
-                    const reminderItems = tasks.filter(t => t.reminder_at).map(task => {
+                    const now = Date.now();
+                    const reminderItems = tasks.filter(t => t.reminder_at && new Date(t.reminder_at).getTime() <= now).map(task => {
                       const taskPath = getTaskPath(task);
                       return {
                         id: `reminder-${task.id}`,
