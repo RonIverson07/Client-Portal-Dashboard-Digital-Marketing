@@ -133,6 +133,9 @@ export default function SpacesPage() {
   const [tableStatusFilter, setTableStatusFilter] = useState<string>('All');
   const [tablePriorityFilter, setTablePriorityFilter] = useState<string>('All');
   const [listStatusFilter, setListStatusFilter] = useState<string>('All');
+  const [listSearchQuery, setListSearchQuery] = useState<string>('');
+  const [teamSearchQuery, setTeamSearchQuery] = useState<string>('');
+  const [workloadSearchQuery, setWorkloadSearchQuery] = useState<string>('');
   const [followedTaskIds, setFollowedTaskIds] = useState<string[]>([]);
   const [dismissedActivityIds, setDismissedActivityIds] = useState<string[]>([]);
   const [mindMapParents, setMindMapParents] = useState<Record<string, string>>({});
@@ -1954,7 +1957,21 @@ export default function SpacesPage() {
 
             {activeItem && activeView === 'list' && (
               <>
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px', gap: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, maxWidth: '300px', position: 'relative' }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ position: 'absolute', left: '12px', color: '#94a3b8' }}>
+                      <circle cx="11" cy="11" r="8" />
+                      <path d="m21 21-4.35-4.35" />
+                    </svg>
+                    <input
+                      type="text"
+                      placeholder="Search tasks..."
+                      className={styles.filterSelect}
+                      value={listSearchQuery}
+                      onChange={e => setListSearchQuery(e.target.value)}
+                      style={{ paddingLeft: '36px' }}
+                    />
+                  </div>
                   <select
                     className={styles.filterSelect}
                     value={listStatusFilter}
@@ -1969,7 +1986,11 @@ export default function SpacesPage() {
                 <div className={styles.listViewContainer}>
 
                   {statuses.filter(s => listStatusFilter === 'All' || s === listStatusFilter).map(status => {
-                    const colTasks = currentTasks.filter(t => t.status === status);
+                    const colTasks = currentTasks.filter(t => t.status === status).filter(t => 
+                      t.title.toLowerCase().includes(listSearchQuery.toLowerCase()) ||
+                      (t.description && t.description.toLowerCase().includes(listSearchQuery.toLowerCase())) ||
+                      (t.assignee && t.assignee.toLowerCase().includes(listSearchQuery.toLowerCase()))
+                    );
                     const { color: statusColor, bg: statusBg } = getStatusStyles(status);
 
                     return (
@@ -2221,78 +2242,189 @@ export default function SpacesPage() {
                       </div>
                     </div>
                   ) : calendarView === 'week' ? (
-                    <div className={styles.weekView}>
-                      <div className={styles.weekHeader}>
-                        <div className={styles.timeGutter}></div>
+                    <div className={styles.calendarMonthContainer}>
+                      <div className={styles.calendarWeekdayHeaders}>
                         {Array.from({ length: 7 }).map((_, i) => {
                           const d = new Date(viewDate);
                           d.setDate(viewDate.getDate() - viewDate.getDay() + i);
                           const isToday = new Date().toDateString() === d.toDateString();
                           return (
-                            <div key={i} className={`${styles.weekDayColumnHeader} ${isToday ? styles.todayHighlight : ''}`}>
-                              <span className={styles.weekDayName}>{d.toLocaleDateString('default', { weekday: 'short' })}</span>
-                              <span className={styles.weekDayNumber}>{d.getDate()}</span>
+                            <div key={i} className={`${styles.weekdayHeader} ${isToday ? styles.todayHighlight : ''}`}>
+                              <span>{d.toLocaleDateString('default', { weekday: 'short' })}</span>
+                              <span className={isToday ? styles.todayLabel : ''}>{d.getDate()}</span>
                             </div>
                           );
                         })}
                       </div>
-                      <div className={styles.weekBody}>
-                        <div className={styles.timeGutter}>
-                          {Array.from({ length: 24 }).map((_, i) => (
-                            <div key={i} className={styles.hourLabel}>{i === 0 ? '12 AM' : i < 12 ? `${i} AM` : i === 12 ? '12 PM' : `${i - 12} PM`}</div>
-                          ))}
-                        </div>
-                        <div className={styles.weekGrid}>
-                          {Array.from({ length: 7 }).map((_, i) => {
+                      <div className={styles.calendarWeeksBody}>
+                        {(() => {
+                          const days: { date: Date }[] = [];
+                          for (let i = 0; i < 7; i++) {
                             const d = new Date(viewDate);
                             d.setDate(viewDate.getDate() - viewDate.getDay() + i);
-                            const dateStr = localDateStr(d);
-                            const dayTasks = currentTasks.filter(t => calendarTaskInRange(t, dateStr));
-                            return (
-                              <div key={i} className={styles.weekColumn}>
-                                <div className={styles.allDaySection}>
-                                  {dayTasks.map(task => (
-                                    <div key={task.id} className={styles.calendarTask} style={{ borderLeftColor: getStatusStyles(task.status).color }} onClick={(e) => { e.stopPropagation(); openModal('Rename', task.id, 'task', task.title, task); }}>
+                            days.push({ date: d });
+                          }
+                          const weekStart = localDateStr(days[0].date);
+                          const weekEnd = localDateStr(days[6].date);
+
+                          const weekTasks = currentTasks.filter(task => {
+                            const s = task.startDate || task.dueDate;
+                            const e = task.dueDate || task.startDate;
+                            if (!s || !e) return false;
+                            return s <= weekEnd && e >= weekStart;
+                          });
+
+                          type SlotEntry = { startCol: number; endCol: number; slot: number };
+                          const slotEntries: SlotEntry[] = [];
+                          const taskSlots: Record<string, number> = {};
+                          weekTasks.forEach(task => {
+                            const ts = task.startDate || task.dueDate || '';
+                            const te = task.dueDate || task.startDate || '';
+                            const scIdx = ts < weekStart ? 0 : days.findIndex(d => localDateStr(d.date) === ts);
+                            const ecIdx = te > weekEnd ? 6 : days.findIndex(d => localDateStr(d.date) === te);
+                            const startCol = scIdx < 0 ? 0 : scIdx;
+                            const endCol = ecIdx < 0 ? 6 : ecIdx;
+                            let slot = 0;
+                            while (slotEntries.some(e => e.slot === slot && !(e.endCol < startCol || e.startCol > endCol))) slot++;
+                            slotEntries.push({ startCol, endCol, slot });
+                            taskSlots[task.id] = slot;
+                          });
+
+                          const numSlots = weekTasks.length > 0 ? Math.max(...Object.values(taskSlots)) + 1 : 0;
+                          const rowMinHeight = Math.max(110, 36 + numSlots * 26 + 8);
+
+                          return (
+                            <div key="week" className={styles.calendarWeekRow} style={{ minHeight: rowMinHeight }}>
+                              {days.map((dayObj, dayIdx) => {
+                                const isToday = new Date().toDateString() === dayObj.date.toDateString();
+                                return (
+                                  <div key={dayIdx} className={`${styles.calendarDayCell} ${isToday ? styles.todayDayCell : ''}`}>
+                                    <div className={`${styles.dayLabel} ${isToday ? styles.todayLabel : ''}`}>
+                                      {dayObj.date.getDate()}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                              <div className={styles.calendarSpanBarsLayer}>
+                                {weekTasks.map(task => {
+                                  const { color: statusColor } = getStatusStyles(task.status);
+                                  const ts = task.startDate || task.dueDate || '';
+                                  const te = task.dueDate || task.startDate || '';
+                                  const scIdx = ts < weekStart ? 0 : days.findIndex(d => localDateStr(d.date) === ts);
+                                  const ecIdx = te > weekEnd ? 6 : days.findIndex(d => localDateStr(d.date) === te);
+                                  const startCol = scIdx < 0 ? 0 : scIdx;
+                                  const endCol = ecIdx < 0 ? 6 : ecIdx;
+                                  const spanCols = endCol - startCol + 1;
+                                  const slot = taskSlots[task.id] || 0;
+                                  const isStart = ts >= weekStart;
+                                  const isEnd = te <= weekEnd;
+                                  return (
+                                    <div
+                                      key={task.id}
+                                      className={styles.calendarSpanBar}
+                                      style={{
+                                        left: `calc(${(startCol / 7) * 100}% + ${isStart ? 3 : 0}px)`,
+                                        width: `calc(${(spanCols / 7) * 100}% - ${isStart ? 6 : 3}px)`,
+                                        top: `${32 + slot * 26}px`,
+                                        background: statusColor + '18',
+                                        borderLeft: isStart ? `3px solid ${statusColor}` : 'none',
+                                        borderRadius: isStart && isEnd ? '4px' : isStart ? '4px 0 0 4px' : isEnd ? '0 4px 4px 0' : '0',
+                                        color: statusColor,
+                                      }}
+                                      onClick={(e) => { e.stopPropagation(); openModal('Rename', task.id, 'task', task.title, task); }}
+                                      onContextMenu={(e) => handleContextMenu(e, 'task', task.id)}
+                                    >
                                       {task.title}
                                     </div>
-                                  ))}
-                                </div>
-                                {Array.from({ length: 24 }).map((_, h) => (
-                                  <div key={h} className={styles.hourSlot}></div>
-                                ))}
+                                  );
+                                })}
                               </div>
-                            );
-                          })}
-                        </div>
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
                   ) : (
-                    <div className={styles.dayView}>
-                      <div className={styles.dayHeader}>
-                        <div className={styles.timeGutter}></div>
-                        <div className={styles.dayColumnHeader}>
-                          <span className={styles.weekDayName}>{viewDate.toLocaleDateString('default', { weekday: 'long' })}</span>
-                          <span className={styles.weekDayNumber}>{viewDate.getDate()}</span>
-                        </div>
+                    <div className={styles.calendarMonthContainer}>
+                      <div className={styles.calendarWeekdayHeaders}>
+                        {(() => {
+                          const isToday = new Date().toDateString() === viewDate.toDateString();
+                          return (
+                            <div className={`${styles.weekdayHeader} ${isToday ? styles.todayHighlight : ''}`} style={{ gridColumn: '1 / 8' }}>
+                              <span>{viewDate.toLocaleDateString('default', { weekday: 'long' })}</span>
+                              <span className={isToday ? styles.todayLabel : ''}>{viewDate.getDate()}</span>
+                            </div>
+                          );
+                        })()}
                       </div>
-                      <div className={styles.dayBody}>
-                        <div className={styles.timeGutter}>
-                          {Array.from({ length: 24 }).map((_, i) => (
-                            <div key={i} className={styles.hourLabel}>{i === 0 ? '12 AM' : i < 12 ? `${i} AM` : i === 12 ? '12 PM' : `${i - 12} PM`}</div>
-                          ))}
-                        </div>
-                        <div className={styles.dayColumn}>
-                          <div className={styles.allDaySection}>
-                            {currentTasks.filter(t => calendarTaskInRange(t, localDateStr(viewDate))).map(task => (
-                              <div key={task.id} className={styles.calendarTask} style={{ borderLeftColor: getStatusStyles(task.status).color }} onClick={(e) => { e.stopPropagation(); openModal('Rename', task.id, 'task', task.title, task); }}>
-                                {task.title}
+                      <div className={styles.calendarWeeksBody}>
+                        {(() => {
+                          const days: { date: Date }[] = [{ date: new Date(viewDate) }];
+                          const dayStart = localDateStr(viewDate);
+                          const dayEnd = localDateStr(viewDate);
+
+                          const dayTasks = currentTasks.filter(task => {
+                            const s = task.startDate || task.dueDate;
+                            const e = task.dueDate || task.startDate;
+                            if (!s || !e) return false;
+                            return s <= dayEnd && e >= dayStart;
+                          });
+
+                          type SlotEntry = { startCol: number; endCol: number; slot: number };
+                          const slotEntries: SlotEntry[] = [];
+                          const taskSlots: Record<string, number> = {};
+                          dayTasks.forEach(task => {
+                            const startCol = 0;
+                            const endCol = 0;
+                            let slot = 0;
+                            while (slotEntries.some(e => e.slot === slot && !(e.endCol < startCol || e.startCol > endCol))) slot++;
+                            slotEntries.push({ startCol, endCol, slot });
+                            taskSlots[task.id] = slot;
+                          });
+
+                          const numSlots = dayTasks.length > 0 ? Math.max(...Object.values(taskSlots)) + 1 : 0;
+                          const rowMinHeight = Math.max(110, 36 + numSlots * 26 + 8);
+
+                          return (
+                            <div key="day" className={styles.calendarWeekRow} style={{ minHeight: rowMinHeight }}>
+                              {days.map((dayObj, dayIdx) => {
+                                const isToday = new Date().toDateString() === dayObj.date.toDateString();
+                                return (
+                                  <div key={dayIdx} className={`${styles.calendarDayCell} ${isToday ? styles.todayDayCell : ''}`} style={{ gridColumn: '1 / 8' }}>
+                                    <div className={`${styles.dayLabel} ${isToday ? styles.todayLabel : ''}`}>
+                                      {dayObj.date.getDate()}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                              <div className={styles.calendarSpanBarsLayer}>
+                                {dayTasks.map(task => {
+                                  const { color: statusColor } = getStatusStyles(task.status);
+                                  const slot = taskSlots[task.id] || 0;
+                                  return (
+                                    <div
+                                      key={task.id}
+                                      className={styles.calendarSpanBar}
+                                      style={{
+                                        left: `calc(0% + 3px)`,
+                                        width: `calc(100% - 6px)`,
+                                        top: `${32 + slot * 26}px`,
+                                        background: statusColor + '18',
+                                        borderLeft: `3px solid ${statusColor}`,
+                                        borderRadius: '4px',
+                                        color: statusColor,
+                                      }}
+                                      onClick={(e) => { e.stopPropagation(); openModal('Rename', task.id, 'task', task.title, task); }}
+                                      onContextMenu={(e) => handleContextMenu(e, 'task', task.id)}
+                                    >
+                                      {task.title}
+                                    </div>
+                                  );
+                                })}
                               </div>
-                            ))}
-                          </div>
-                          {Array.from({ length: 24 }).map((_, h) => (
-                            <div key={h} className={styles.hourSlot}></div>
-                          ))}
-                        </div>
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
                   )}
@@ -2597,6 +2729,22 @@ export default function SpacesPage() {
 
             {activeItem && activeView === 'team' && (
               <div className={styles.teamContainer}>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '280px', position: 'relative' }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ position: 'absolute', left: '12px', color: '#94a3b8' }}>
+                      <circle cx="11" cy="11" r="8" />
+                      <path d="m21 21-4.35-4.35" />
+                    </svg>
+                    <input
+                      type="text"
+                      placeholder="Search team members..."
+                      className={styles.filterSelect}
+                      value={teamSearchQuery}
+                      onChange={e => setTeamSearchQuery(e.target.value)}
+                      style={{ paddingLeft: '36px', width: '100%' }}
+                    />
+                  </div>
+                </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '20px' }}>
                   {(() => {
                     const members = Array.from(new Set(currentTasks.map(t => formatAssignee(t.assignee))));
@@ -2604,7 +2752,9 @@ export default function SpacesPage() {
                       if (a === 'Unassigned') return -1;
                       if (b === 'Unassigned') return 1;
                       return a.localeCompare(b);
-                    });
+                    }).filter(member => 
+                      member.toLowerCase().includes(teamSearchQuery.toLowerCase())
+                    );
 
                     return sortedMembers.map(member => {
                       const memberTasks = currentTasks.filter(t => formatAssignee(t.assignee) === member);
@@ -2803,6 +2953,20 @@ export default function SpacesPage() {
                 <div className={styles.workloadHeader}>
                   <div style={{ fontSize: '18px', fontWeight: 700, color: '#0f172a' }}>Workload</div>
                   <div style={{ display: 'flex', gap: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '280px', position: 'relative' }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ position: 'absolute', left: '12px', color: '#94a3b8' }}>
+                        <circle cx="11" cy="11" r="8" />
+                        <path d="m21 21-4.35-4.35" />
+                      </svg>
+                      <input
+                        type="text"
+                        placeholder="Search assignees..."
+                        className={styles.filterSelect}
+                        value={workloadSearchQuery}
+                        onChange={e => setWorkloadSearchQuery(e.target.value)}
+                        style={{ paddingLeft: '36px', width: '100%' }}
+                      />
+                    </div>
                     <select
                       value={workloadRange}
                       onChange={(e) => setWorkloadRange(parseInt(e.target.value))}
@@ -2842,7 +3006,9 @@ export default function SpacesPage() {
                     const assignees = Array.from(new Set(currentTasks.map(t => formatAssignee(t.assignee))));
                     if (assignees.length === 0) assignees.push('You', 'Unassigned');
 
-                    return assignees.map(assignee => {
+                    return assignees.filter(assignee => 
+                      assignee.toLowerCase().includes(workloadSearchQuery.toLowerCase())
+                    ).map(assignee => {
                       const assigneeTasks = currentTasks.filter(
                         t => formatAssignee(t.assignee) === assignee && t.status !== 'COMPLETE'
                       );

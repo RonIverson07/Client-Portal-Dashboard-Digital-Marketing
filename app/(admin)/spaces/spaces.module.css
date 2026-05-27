@@ -951,7 +951,7 @@
 .listViewContainer {
   display: flex;
   flex-direction: column;
-  gap: 32px;
+  gap: 16px;
 }
 
 .statusGroup {
@@ -968,7 +968,7 @@
   font-size: 13px;
   width: fit-content;
   border-radius: 6px;
-  margin-bottom: 16px;
+  margin-bottom: 8px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
@@ -983,7 +983,7 @@
 .listViewHeader {
   display: grid;
   grid-template-columns: 1fr 120px 140px 120px 40px;
-  padding: 12px 12px;
+  padding: 10px 12px;
   font-size: 12px;
   color: #64748b;
   font-weight: 700;
@@ -995,7 +995,7 @@
 .listRow {
   display: grid;
   grid-template-columns: 1fr 120px 140px 120px 40px;
-  padding: 14px 12px;
+  padding: 10px 12px;
   font-size: 14px;
   color: #0f172a;
   border-bottom: 1px solid #f1f5f9;
