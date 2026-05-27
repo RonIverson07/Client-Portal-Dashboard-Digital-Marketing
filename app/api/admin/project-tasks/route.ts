@@ -52,7 +52,7 @@ export async function PATCH(req: NextRequest) {
     // 3. Log changes if applicable
     if (currentTask) {
       const logs = [];
-      const fieldsToLog = ['status', 'title', 'description', 'assignee', 'due_date', 'priority'];
+      const fieldsToLog = ['status', 'title', 'description', 'assignee', 'due_date', 'priority', 'list_id'];
       
       fieldsToLog.forEach(field => {
         if (updates[field] !== undefined && currentTask[field] !== updates[field]) {

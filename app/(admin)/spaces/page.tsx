@@ -136,6 +136,8 @@ export default function SpacesPage() {
   const [listSearchQuery, setListSearchQuery] = useState<string>('');
   const [teamSearchQuery, setTeamSearchQuery] = useState<string>('');
   const [workloadSearchQuery, setWorkloadSearchQuery] = useState<string>('');
+  const [draggedTask, setDraggedTask] = useState<SpaceTask | null>(null);
+  const [hoveredWorkloadCell, setHoveredWorkloadCell] = useState<{ assignee: string; date: string } | null>(null);
   const [followedTaskIds, setFollowedTaskIds] = useState<string[]>([]);
   const [dismissedActivityIds, setDismissedActivityIds] = useState<string[]>([]);
   const [mindMapParents, setMindMapParents] = useState<Record<string, string>>({});
@@ -1422,6 +1424,31 @@ export default function SpacesPage() {
                           className={`${styles.treeItem} ${styles.indentLevel1} ${activeItem?.id === folder.id ? styles.treeItemActive : ''}`}
                           onClick={() => setActiveItem({ type: 'folder', id: folder.id })}
                           onContextMenu={(e) => handleContextMenu(e, 'folder', folder.id)}
+                          onDragOver={(e) => {
+                            e.preventDefault();
+                            const folderLists = lists.filter(l => l.parentId === folder.id);
+                            if (folderLists.length === 1) {
+                              e.dataTransfer.dropEffect = 'move';
+                            }
+                          }}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            if (draggedTask) {
+                              const folderLists = lists.filter(l => l.parentId === folder.id);
+                              if (folderLists.length === 1) {
+                                const targetList = folderLists[0];
+                                setTasks(prev => prev.map(t => 
+                                  t.id === draggedTask.id ? { ...t, listId: targetList.id } : t
+                                ));
+                                fetch('/api/admin/project-tasks', {
+                                  method: 'PATCH',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ id: draggedTask.id, list_id: targetList.id })
+                                }).then(() => fetchLogs());
+                              }
+                            }
+                            setDraggedTask(null);
+                          }}
                         >
                           <button className={styles.chevronBtn} onClick={(e) => toggleExpand(e, folder.id)}>
                             {isExpanded(folder.id) ? '▼' : '▶'}
@@ -1440,6 +1467,24 @@ export default function SpacesPage() {
                                 className={`${styles.treeItem} ${styles.indentLevel2} ${activeItem?.id === list.id ? styles.treeItemActive : ''}`}
                                 onClick={() => setActiveItem({ type: 'list', id: list.id })}
                                 onContextMenu={(e) => handleContextMenu(e, 'list', list.id)}
+                                onDragOver={(e) => {
+                                  e.preventDefault();
+                                  e.dataTransfer.dropEffect = 'move';
+                                }}
+                                onDrop={(e) => {
+                                  e.preventDefault();
+                                  if (draggedTask) {
+                                    setTasks(prev => prev.map(t => 
+                                      t.id === draggedTask.id ? { ...t, listId: list.id } : t
+                                    ));
+                                    fetch('/api/admin/project-tasks', {
+                                      method: 'PATCH',
+                                      headers: { 'Content-Type': 'application/json' },
+                                      body: JSON.stringify({ id: draggedTask.id, list_id: list.id })
+                                    }).then(() => fetchLogs());
+                                  }
+                                  setDraggedTask(null);
+                                }}
                               >
                                 <div className={styles.treeIcon} style={{ marginLeft: '24px' }}><IconList color={list.color} /></div>
                                 <div>{list.name}</div>
@@ -1457,6 +1502,24 @@ export default function SpacesPage() {
                         className={`${styles.treeItem} ${styles.indentLevel1} ${activeItem?.id === list.id ? styles.treeItemActive : ''}`}
                         onClick={() => setActiveItem({ type: 'list', id: list.id })}
                         onContextMenu={(e) => handleContextMenu(e, 'list', list.id)}
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          e.dataTransfer.dropEffect = 'move';
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          if (draggedTask) {
+                            setTasks(prev => prev.map(t => 
+                              t.id === draggedTask.id ? { ...t, listId: list.id } : t
+                            ));
+                            fetch('/api/admin/project-tasks', {
+                              method: 'PATCH',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ id: draggedTask.id, list_id: list.id })
+                            }).then(() => fetchLogs());
+                          }
+                          setDraggedTask(null);
+                        }}
                       >
                         <div className={styles.treeIcon} style={{ marginLeft: '24px' }}><IconList color={list.color} /></div>
                         <div>{list.name}</div>
@@ -1994,7 +2057,28 @@ export default function SpacesPage() {
                     const { color: statusColor, bg: statusBg } = getStatusStyles(status);
 
                     return (
-                      <div key={status} className={styles.statusGroup}>
+                      <div 
+                        key={status} 
+                        className={styles.statusGroup}
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          e.dataTransfer.dropEffect = 'move';
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          if (draggedTask && draggedTask.status !== status) {
+                            setTasks(prev => prev.map(t => 
+                              t.id === draggedTask.id ? { ...t, status } : t
+                            ));
+                            fetch('/api/admin/project-tasks', {
+                              method: 'PATCH',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ id: draggedTask.id, status })
+                            }).then(() => fetchLogs());
+                          }
+                          setDraggedTask(null);
+                        }}
+                      >
                         <div className={styles.statusGroupHeader} style={{ background: statusBg, color: statusColor }}>
                           {status}
                           <span className={styles.statusCount}>{colTasks.length}</span>
@@ -2009,7 +2093,20 @@ export default function SpacesPage() {
                         </div>
 
                         {colTasks.map(task => (
-                          <div key={task.id} className={styles.listRow}>
+                          <div 
+                            key={task.id} 
+                            className={styles.listRow}
+                            draggable
+                            onDragStart={(e) => {
+                              setDraggedTask(task);
+                              e.dataTransfer.effectAllowed = 'move';
+                            }}
+                            onDragEnd={() => setDraggedTask(null)}
+                            style={{ 
+                              opacity: draggedTask?.id === task.id ? 0.5 : 1, 
+                              cursor: 'grab' 
+                            }}
+                          >
                             <div className={styles.taskNameCell} onClick={(e) => { e.stopPropagation(); openModal('Rename', task.id, 'task', task.title, task); }}>
                               <div className={styles.statusIconCircle} style={{ borderColor: statusColor }} onClick={(e) => { e.stopPropagation(); handleContextMenu(e, 'statusGroup', status); }}>
                                 {status === 'COMPLETE' && <svg width="8" height="8" viewBox="0 0 24 24" fill={statusColor}><path d="M20.285 2l-11.285 11.567-5.286-5.011-3.714 3.716 9 8.728 15-15.285z" /></svg>}
@@ -3045,11 +3142,40 @@ export default function SpacesPage() {
                             const hasTask = hoursOnDate > 0;
 
                             return (
-                              <div key={i} className={styles.workloadCell}>
-                                <div className={`${styles.workloadCellBox} ${hasTask ? styles.workloadCellBoxActive : ''}`}>
+                              <div key={i} className={styles.workloadCell} style={{ position: 'relative' }}>
+                                <div 
+                                  className={`${styles.workloadCellBox} ${hasTask ? styles.workloadCellBoxActive : ''}`}
+                                  onMouseEnter={() => setHoveredWorkloadCell({ assignee, date: dateString })}
+                                  onMouseLeave={() => setHoveredWorkloadCell(null)}
+                                >
                                   {formatWorkloadHours(hoursOnDate)}
                                   {hasTask && <div className={styles.workloadTaskCount}>{tasksOnDate.length}</div>}
                                 </div>
+                                {hoveredWorkloadCell?.assignee === assignee && hoveredWorkloadCell?.date === dateString && (
+                                  <div style={{
+                                    position: 'absolute',
+                                    bottom: '100%',
+                                    left: '50%',
+                                    transform: 'translateX(-50%)',
+                                    marginBottom: '8px',
+                                    background: '#0f172a',
+                                    color: 'white',
+                                    padding: '8px 12px',
+                                    borderRadius: '6px',
+                                    fontSize: '12px',
+                                    whiteSpace: 'nowrap',
+                                    zIndex: 100,
+                                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                                  }}>
+                                    {hasTask ? (
+                                      tasksOnDate.map((td, idx) => (
+                                        <div key={idx}>{td.task.title}</div>
+                                      ))
+                                    ) : (
+                                      <div>Nothing scheduled</div>
+                                    )}
+                                  </div>
+                                )}
                               </div>
                             )
                           })}
