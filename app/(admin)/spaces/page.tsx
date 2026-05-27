@@ -138,6 +138,10 @@ export default function SpacesPage() {
   const [workloadSearchQuery, setWorkloadSearchQuery] = useState<string>('');
   const [draggedTask, setDraggedTask] = useState<SpaceTask | null>(null);
   const [hoveredWorkloadCell, setHoveredWorkloadCell] = useState<{ assignee: string; date: string } | null>(null);
+  const [backlogOpen, setBacklogOpen] = useState<boolean>(false);
+  const [backlogSearchQuery, setBacklogSearchQuery] = useState<string>('');
+  const [activeBacklogTab, setActiveBacklogTab] = useState<string>('Unscheduled');
+  const [backlogSortBy, setBacklogSortBy] = useState<string>('All Priority');
   const [followedTaskIds, setFollowedTaskIds] = useState<string[]>([]);
   const [dismissedActivityIds, setDismissedActivityIds] = useState<string[]>([]);
   const [mindMapParents, setMindMapParents] = useState<Record<string, string>>({});
@@ -3050,6 +3054,30 @@ export default function SpacesPage() {
                 <div className={styles.workloadHeader}>
                   <div style={{ fontSize: '18px', fontWeight: 700, color: '#0f172a' }}>Workload</div>
                   <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      onClick={() => setBacklogOpen(!backlogOpen)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '8px 16px',
+                        borderRadius: '6px',
+                        border: backlogOpen ? '1px solid #2563eb' : '1px solid #e2e8f0',
+                        fontSize: '13px',
+                        fontWeight: 500,
+                        color: backlogOpen ? '#2563eb' : '#475569',
+                        background: backlogOpen ? '#eff6ff' : 'white',
+                        outline: 'none',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                        <line x1="3" y1="9" x2="21" y2="9" />
+                        <line x1="9" y1="21" x2="9" y2="9" />
+                      </svg>
+                      Backlog
+                    </button>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '280px', position: 'relative' }}>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ position: 'absolute', left: '12px', color: '#94a3b8' }}>
                         <circle cx="11" cy="11" r="8" />
@@ -3075,7 +3103,8 @@ export default function SpacesPage() {
                   </div>
                 </div>
 
-                <div className={styles.workloadGrid}>
+                <div style={{ display: 'flex', gap: '16px' }}>
+                  <div className={styles.workloadGrid} style={{ flex: backlogOpen ? 3 : 1 }}>
                   <div className={styles.workloadGridHeader}>
                     <div className={styles.workloadAssigneeCol}>Assignee</div>
                     {[...Array(workloadRange)].map((_, i) => {
@@ -3183,6 +3212,223 @@ export default function SpacesPage() {
                       )
                     });
                   })()}
+                </div>
+
+                {backlogOpen && (
+                  <div style={{
+                    width: '420px',
+                    background: 'white',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '12px',
+                    overflow: 'hidden',
+                    display: 'flex',
+                    flexDirection: 'column'
+                  }}>
+                    <div style={{
+                      padding: '16px',
+                      borderBottom: '1px solid #e2e8f0',
+                      background: '#f8fafc'
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                        <div style={{ fontSize: '15px', fontWeight: 700, color: '#0f172a' }}>Tasks</div>
+                      </div>
+                      <div style={{ display: 'flex', gap: '12px', fontSize: '13px', color: '#64748b', flexWrap: 'wrap' }}>
+                        {['Unscheduled', 'No estimate', 'Overdue', 'Unassigned'].map(tab => (
+                          <div
+                            key={tab}
+                            onClick={() => setActiveBacklogTab(tab)}
+                            style={{
+                              fontWeight: activeBacklogTab === tab ? 600 : 500,
+                              color: activeBacklogTab === tab ? '#0f172a' : '#64748b',
+                              borderBottom: activeBacklogTab === tab ? '2px solid #0f172a' : '2px solid transparent',
+                              paddingBottom: '8px',
+                              cursor: 'pointer',
+                              whiteSpace: 'nowrap',
+                              flexShrink: 0
+                            }}
+                          >
+                            {tab}
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{ marginTop: '12px', position: 'relative' }}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }}>
+                          <circle cx="11" cy="11" r="8" />
+                          <path d="m21 21-4.35-4.35" />
+                        </svg>
+                        <input
+                          type="text"
+                          placeholder="Search tasks..."
+                          value={backlogSearchQuery}
+                          onChange={e => setBacklogSearchQuery(e.target.value)}
+                          style={{
+                            width: '100%',
+                            padding: '8px 12px',
+                            paddingLeft: '36px',
+                            border: '1px solid #e2e8f0',
+                            borderRadius: '6px',
+                            fontSize: '13px',
+                            outline: 'none'
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ padding: '12px 16px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <select
+                          value={backlogSortBy}
+                          onChange={e => setBacklogSortBy(e.target.value)}
+                          style={{
+                            padding: '8px 14px',
+                            borderRadius: '8px',
+                            border: '1px solid #e2e8f0',
+                            fontSize: '13px',
+                            fontWeight: 500,
+                            color: '#0f172a',
+                            outline: 'none',
+                            background: '#f8fafc',
+                            cursor: 'pointer',
+                            transition: 'all 0.15s ease'
+                          }}
+                        >
+                          <option value="All Priority">All Priority</option>
+                          <option value="Urgent">Urgent</option>
+                          <option value="High">High</option>
+                          <option value="Normal">Normal</option>
+                          <option value="Low">Low</option>
+                          <option value="Clear">Clear</option>
+                        </select>
+                      </div>
+                      <div style={{ fontSize: '13px', color: '#64748b' }}>
+                        {(() => {
+                          const rangeStart = new Date();
+                          rangeStart.setHours(0,0,0,0);
+                          const rangeEnd = new Date();
+                          rangeEnd.setDate(rangeEnd.getDate() + workloadRange);
+                          
+                          let filtered = currentTasks.filter(task => {
+                            const matchesSearch = task.title.toLowerCase().includes(backlogSearchQuery.toLowerCase());
+                            const normalizedStatus = task.status.toUpperCase();
+                            const isCompleted = normalizedStatus.includes('COMPLETE') || normalizedStatus.includes('DONE');
+                            return matchesSearch && !isCompleted;
+                          });
+                          
+                          if (activeBacklogTab === 'Unscheduled') {
+                            filtered = filtered.filter(task => {
+                              const missingStart = !task.startDate;
+                              const missingDue = !task.dueDate;
+                              
+                              if (missingStart || missingDue) {
+                                return true;
+                              }
+                              
+                              const start = new Date(task.startDate!);
+                              const due = new Date(task.dueDate!);
+                              
+                              const taskStartsAfterRange = start > rangeEnd;
+                              const taskEndsBeforeRange = due < rangeStart;
+                              
+                              return taskStartsAfterRange || taskEndsBeforeRange;
+                            });
+                          } else if (activeBacklogTab === 'Overdue') {
+                            filtered = filtered.filter(task => 
+                              task.dueDate && new Date(task.dueDate) < rangeStart
+                            );
+                          } else if (activeBacklogTab === 'No estimate') {
+                            filtered = filtered.filter(task => 
+                              !task.timeEstimateHours || task.timeEstimateHours === 0
+                            );
+                          } else if (activeBacklogTab === 'Unassigned') {
+                            filtered = filtered.filter(task => 
+                              !task.assignee || task.assignee.trim() === ''
+                            );
+                          }
+                          
+                          if (backlogSortBy !== 'All Priority') {
+                            filtered = filtered.filter(task => task.priority === backlogSortBy);
+                          }
+                          
+                          return `${filtered.length} tasks`;
+                        })()}
+                      </div>
+                    </div>
+
+                    <div style={{ flex: 1, overflowY: 'auto', padding: '8px 16px' }}>
+                      {(() => {
+                        const rangeStart = new Date();
+                        rangeStart.setHours(0,0,0,0);
+                        const rangeEnd = new Date();
+                        rangeEnd.setDate(rangeEnd.getDate() + workloadRange);
+                        
+                        let filteredTasks = currentTasks.filter(task => {
+                          const matchesSearch = task.title.toLowerCase().includes(backlogSearchQuery.toLowerCase());
+                          const normalizedStatus = task.status.toUpperCase();
+                          const isCompleted = normalizedStatus.includes('COMPLETE') || normalizedStatus.includes('DONE');
+                          return matchesSearch && !isCompleted;
+                        });
+                        
+                        if (activeBacklogTab === 'Unscheduled') {
+                          filteredTasks = filteredTasks.filter(task => {
+                            const missingStart = !task.startDate;
+                            const missingDue = !task.dueDate;
+                            
+                            if (missingStart || missingDue) {
+                              return true;
+                            }
+                            
+                            const start = new Date(task.startDate!);
+                            const due = new Date(task.dueDate!);
+                            
+                            const taskStartsAfterRange = start > rangeEnd;
+                            const taskEndsBeforeRange = due < rangeStart;
+                            
+                            return taskStartsAfterRange || taskEndsBeforeRange;
+                          });
+                        } else if (activeBacklogTab === 'Overdue') {
+                          filteredTasks = filteredTasks.filter(task => 
+                            task.dueDate && new Date(task.dueDate) < rangeStart
+                          );
+                        } else if (activeBacklogTab === 'No estimate') {
+                          filteredTasks = filteredTasks.filter(task => 
+                            !task.timeEstimateHours || task.timeEstimateHours === 0
+                          );
+                        } else if (activeBacklogTab === 'Unassigned') {
+                          filteredTasks = filteredTasks.filter(task => 
+                            !task.assignee || task.assignee.trim() === ''
+                          );
+                        }
+                        
+                        if (backlogSortBy !== 'All Priority') {
+                          filteredTasks = filteredTasks.filter(task => task.priority === backlogSortBy);
+                        }
+
+                        const priorityOrder = ['Urgent', 'High', 'Normal', 'Low', 'Clear'];
+                        const sortedTasks = [...filteredTasks].sort((a, b) => {
+                          const indexA = priorityOrder.indexOf(a.priority || 'Normal');
+                          const indexB = priorityOrder.indexOf(b.priority || 'Normal');
+                          return indexA - indexB;
+                        });
+                        
+                        return sortedTasks.map(task => (
+                          <div key={task.id} style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '12px',
+                            padding: '10px 0',
+                            borderBottom: '1px solid #f1f5f9',
+                            cursor: 'pointer'
+                          }} onClick={() => openModal('Rename', task.id, 'task', task.title, task)}>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2">
+                              <circle cx="12" cy="12" r="10" />
+                            </svg>
+                            <div style={{ fontSize: '14px', color: '#0f172a', fontWeight: 500 }}>{task.title}</div>
+                          </div>
+                        ));
+                      })()}
+                    </div>
+                  </div>
+                )}
                 </div>
               </div>
             )}
