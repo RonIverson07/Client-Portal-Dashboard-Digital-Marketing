@@ -415,6 +415,22 @@ export default function SpacesPage() {
     }
   };
 
+  const isOverdue = (dueDateStr: string | null | undefined): boolean => {
+    if (!dueDateStr) return false;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    let dueDate: Date;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dueDateStr)) {
+      const [y, m, d] = dueDateStr.split('-').map(Number);
+      dueDate = new Date(y, m - 1, d);
+    } else {
+      const [m, d, y] = dueDateStr.split(/[/-]/).map(Number);
+      dueDate = new Date(y, m - 1, d);
+    }
+    dueDate.setHours(0, 0, 0, 0);
+    return dueDate < today;
+  };
+
   const [modalConfig, setModalConfig] = useState<{
     isOpen: boolean;
     type: 'Space' | 'Folder' | 'List' | 'Task' | 'Rename' | 'Delete' | 'Move' | 'Color' | 'Archive';
@@ -1385,6 +1401,29 @@ export default function SpacesPage() {
     return '';
   };
 
+  const getTaskPath = (task: SpaceTask): string => {
+    if (!task.listId) return '';
+    const list = lists.find(l => l.id === task.listId);
+    if (!list) return '';
+    const pathParts: string[] = [list.name];
+    if (list.parentId) {
+      const folder = folders.find(f => f.id === list.parentId);
+      if (folder) {
+        pathParts.unshift(folder.name);
+        const space = spaces.find(s => s.id === folder.spaceId);
+        if (space) {
+          pathParts.unshift(space.name);
+        }
+      } else {
+        const space = spaces.find(s => s.id === list.parentId);
+        if (space) {
+          pathParts.unshift(space.name);
+        }
+      }
+    }
+    return pathParts.join(' > ');
+  };
+
   const deleteTask = (id: string) => {
     setTasks(tasks.filter(t => t.id !== id));
   };
@@ -1551,14 +1590,17 @@ export default function SpacesPage() {
               {/* Notification Bell */}
               <div style={{ position: 'relative' }}>
                 {(() => {
-                  const dropdownReminderItems = tasks.filter(t => t.reminder_at).map(task => ({
-                    id: `reminder-${task.id}`,
-                    type: 'reminder',
-                    time: new Date(task.reminder_at!).getTime(),
-                    title: task.title,
-                    subtitle: '⏰ REMINDER',
-                    description: `Scheduled for: ${new Date(task.reminder_at!).toLocaleDateString()}`,
-                  }));
+                  const dropdownReminderItems = tasks.filter(t => t.reminder_at).map(task => {
+                    const taskPath = getTaskPath(task);
+                    return {
+                      id: `reminder-${task.id}`,
+                      type: 'reminder',
+                      time: new Date(task.reminder_at!).getTime(),
+                      title: task.title,
+                      subtitle: '⏰ REMINDER',
+                      description: `Scheduled for: ${new Date(task.reminder_at!).toLocaleDateString()}${taskPath ? ` • In: ${taskPath}` : ''}`,
+                    };
+                  });
 
                   const followedTaskIdsInView = tasks.filter(t => followedTaskIds.includes(t.id)).map(t => t.id);
                   const followedActivityLogs = activityLogs.filter(log =>
@@ -1567,11 +1609,16 @@ export default function SpacesPage() {
 
                   const dropdownActivityItems = followedActivityLogs.map(log => {
                     const task = tasks.find(t => t.id === log.task_id);
+                    const taskPath = task ? getTaskPath(task) : '';
                     let changeDescription = '';
                     if (log.action_type === 'creation') {
                       changeDescription = `Task created`;
                     } else if (log.action_type === 'status_change') {
                       changeDescription = `Moved from "${log.previous_value || 'None'}" to "${log.new_value}"`;
+                    } else if (log.action_type === 'list_id_change') {
+                      const oldListName = lists.find(l => l.id === log.previous_value)?.name || 'Unknown List';
+                      const newListName = lists.find(l => l.id === log.new_value)?.name || 'Unknown List';
+                      changeDescription = `Moved from "${oldListName}" to "${newListName}"`;
                     } else if (log.action_type === 'archive') {
                       changeDescription = `Archived`;
                     } else if (log.action_type === 'unarchive') {
@@ -1587,7 +1634,7 @@ export default function SpacesPage() {
                       time: new Date(log.created_at).getTime(),
                       title: task ? task.title : 'Unknown Task',
                       subtitle: `📢 UPDATE`,
-                      description: changeDescription,
+                      description: `${changeDescription}${taskPath ? ` • In: ${taskPath}` : ''}`,
                     };
                   });
 
@@ -1978,9 +2025,11 @@ export default function SpacesPage() {
                             </div>
 
                             {task.dueDate && (
-                              <div className={styles.cardFooterIcon} title="Due Date">
+                              <div className={styles.cardFooterIcon} title="Due Date" style={{ color: isOverdue(task.dueDate) ? '#ef4444' : 'inherit' }}>
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
-                                {task.dueDate}
+                                <span style={{ color: isOverdue(task.dueDate) ? '#ef4444' : 'inherit', fontWeight: isOverdue(task.dueDate) ? 600 : 'normal' }}>
+                                  {task.dueDate}
+                                </span>
                               </div>
                             )}
 
@@ -2128,9 +2177,11 @@ export default function SpacesPage() {
                               <span style={{ fontSize: '13px', color: '#64748b' }}>{formatAssignee(task.assignee)}</span>
                             </div>
 
-                            <div className={styles.cellIcon} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); openModal('Rename', task.id, 'task', task.title, task); }}>
+                            <div className={styles.cellIcon} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', cursor: 'pointer', color: isOverdue(task.dueDate) ? '#ef4444' : 'inherit' }} onClick={(e) => { e.stopPropagation(); openModal('Rename', task.id, 'task', task.title, task); }}>
                               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
-                              {task.dueDate || '-'}
+                              <span style={{ color: isOverdue(task.dueDate) ? '#ef4444' : 'inherit', fontWeight: isOverdue(task.dueDate) ? 600 : 'normal' }}>
+                                {task.dueDate || '-'}
+                              </span>
                             </div>
 
                             <div className={styles.cellIcon} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }} onClick={(e) => { e.stopPropagation(); openModal('Rename', task.id, 'task', task.title, task); }}>
@@ -3441,33 +3492,41 @@ export default function SpacesPage() {
 
                 <div className={styles.inboxList}>
                   {(() => {
-                    const reminderItems = currentTasks.filter(t => t.reminder_at).map(task => ({
-                      id: `reminder-${task.id}`,
-                      taskId: task.id,
-                      type: 'reminder',
-                      time: new Date(task.reminder_at!).getTime(),
-                      status: task.status,
-                      subtitle: '⏰ REMINDER',
-                      badgeColor: '#2563eb',
-                      title: task.title,
-                      description: task.description || 'No description provided.',
-                      dateLabel: `Scheduled for: ${new Date(task.reminder_at!).toLocaleString()}`,
-                      onClear: () => setTaskReminder(task.id, null),
-                      showOptions: true,
-                    }));
+                    const reminderItems = tasks.filter(t => t.reminder_at).map(task => {
+                      const taskPath = getTaskPath(task);
+                      return {
+                        id: `reminder-${task.id}`,
+                        taskId: task.id,
+                        type: 'reminder',
+                        time: new Date(task.reminder_at!).getTime(),
+                        status: task.status,
+                        subtitle: '⏰ REMINDER',
+                        badgeColor: '#2563eb',
+                        title: task.title,
+                        description: `${task.description || 'No description provided.'}${taskPath ? `\nIn: ${taskPath}` : ''}`,
+                        dateLabel: `Scheduled for: ${new Date(task.reminder_at!).toLocaleString()}`,
+                        onClear: () => setTaskReminder(task.id, null),
+                        showOptions: true,
+                      };
+                    });
 
-                    const followedTaskIdsInView = currentTasks.filter(t => followedTaskIds.includes(t.id)).map(t => t.id);
+                    const followedTaskIdsInView = tasks.filter(t => followedTaskIds.includes(t.id)).map(t => t.id);
                     const followedActivityLogs = activityLogs.filter(log =>
                       followedTaskIdsInView.includes(log.task_id) && !dismissedActivityIds.includes(log.id)
                     );
 
                     const activityItems = followedActivityLogs.map(log => {
                       const task = tasks.find(t => t.id === log.task_id);
+                      const taskPath = task ? getTaskPath(task) : '';
                       let changeDescription = '';
                       if (log.action_type === 'creation') {
                         changeDescription = `Task created with status: ${log.new_value}`;
                       } else if (log.action_type === 'status_change') {
                         changeDescription = `Status updated from "${log.previous_value || 'None'}" to "${log.new_value}"`;
+                      } else if (log.action_type === 'list_id_change') {
+                        const oldListName = lists.find(l => l.id === log.previous_value)?.name || 'Unknown List';
+                        const newListName = lists.find(l => l.id === log.new_value)?.name || 'Unknown List';
+                        changeDescription = `Moved from "${oldListName}" to "${newListName}"`;
                       } else if (log.action_type === 'archive') {
                         changeDescription = `Task was archived`;
                       } else if (log.action_type === 'unarchive') {
@@ -3487,7 +3546,7 @@ export default function SpacesPage() {
                         subtitle: `📢 UPDATE: ${log.action_type.toUpperCase().replace('_', ' ')}`,
                         badgeColor: '#10b981',
                         title: task ? task.title : 'Unknown Task',
-                        description: changeDescription,
+                        description: `${changeDescription}${taskPath ? `\nIn: ${taskPath}` : ''}`,
                         dateLabel: `Activity at: ${new Date(log.created_at).toLocaleString()}`,
                         onClear: () => dismissActivity(log.id),
                         showOptions: false,
@@ -3518,7 +3577,7 @@ export default function SpacesPage() {
                             <span style={{ fontSize: '11px', color: '#94a3b8' }}>{item.dateLabel}</span>
                           </div>
                           <div style={{ fontSize: '15px', fontWeight: 600, color: '#1e293b', marginBottom: '4px' }}>{item.title}</div>
-                          <div style={{ fontSize: '13px', color: '#64748b' }}>{item.description}</div>
+                          <div style={{ fontSize: '13px', color: '#64748b', whiteSpace: 'pre-line' }}>{item.description}</div>
                         </div>
                         <div className={styles.inboxItemActions}>
                           <button className={styles.inboxActionBtn} title="Dismiss" onClick={item.onClear}>✓</button>
