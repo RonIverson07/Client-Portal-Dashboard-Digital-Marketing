@@ -141,6 +141,15 @@ export default function SpacesPage() {
     }
   }, [contextMenu]);
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
+  const [currentTime, setCurrentTime] = useState<number>(Date.now());
+
+  // Update current time every second to auto-refresh reminders
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      setCurrentTime(Date.now());
+    }, 1000);
+    return () => clearInterval(intervalId);
+  }, []);
   const [workloadRange, setWorkloadRange] = useState(14);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
   const [tableAssigneeFilter, setTableAssigneeFilter] = useState<string>('All');
@@ -1626,8 +1635,7 @@ export default function SpacesPage() {
               {/* Notification Bell */}
               <div style={{ position: 'relative' }}>
                 {(() => {
-                  const now = Date.now();
-                  const dropdownReminderItems = tasks.filter(t => t.reminder_at && new Date(t.reminder_at).getTime() <= now).map(task => {
+                  const dropdownReminderItems = tasks.filter(t => t.reminder_at && new Date(t.reminder_at).getTime() <= currentTime).map(task => {
                     const taskPath = getTaskPath(task);
                     return {
                       id: `reminder-${task.id}`,
@@ -3529,8 +3537,7 @@ export default function SpacesPage() {
 
                 <div className={styles.inboxList}>
                   {(() => {
-                    const now = Date.now();
-                    const reminderItems = tasks.filter(t => t.reminder_at && new Date(t.reminder_at).getTime() <= now).map(task => {
+                    const reminderItems = tasks.filter(t => t.reminder_at && new Date(t.reminder_at).getTime() <= currentTime).map(task => {
                       const taskPath = getTaskPath(task);
                       return {
                         id: `reminder-${task.id}`,
@@ -4231,18 +4238,26 @@ export default function SpacesPage() {
                           value={manualTime}
                           className={styles.dateInputSmall}
                           style={{ marginTop: '8px', flex: 1 }}
+                          min={(function() {
+                            const now = new Date();
+                            const selectedDate = new Date(calendarYear, calendarMonth, calendarSelectedDay);
+                            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                            if (selectedDate.getTime() === today.getTime()) {
+                              return now.toTimeString().slice(0, 5);
+                            }
+                            return '';
+                          })()}
                           onChange={(e) => setManualTime(e.target.value)}
                         />
                         <button
                           style={{ marginTop: '8px', padding: '4px 12px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '4px', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}
                           onClick={() => {
                             const now = new Date();
-                            const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
                             const d = new Date(calendarYear, calendarMonth, calendarSelectedDay);
                             const [h, m] = manualTime.split(':');
                             d.setHours(parseInt(h), parseInt(m), 0, 0);
                             
-                            if (d < todayStart) {
+                            if (d < now) {
                               showToast('Please select a future date and time!', 'error');
                               return;
                             }
