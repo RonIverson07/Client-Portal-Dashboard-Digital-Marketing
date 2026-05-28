@@ -125,7 +125,21 @@ export default function SpacesPage() {
   const [activeSubMenu, setActiveSubMenu] = useState<'remind' | null>(null);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
-  const [manualDate, setManualDate] = useState<{ day: number, time: string }>({ day: 12, time: '08:00' });
+  const [calendarMonth, setCalendarMonth] = useState<number>(new Date().getMonth());
+  const [calendarYear, setCalendarYear] = useState<number>(new Date().getFullYear());
+  const [calendarSelectedDay, setCalendarSelectedDay] = useState<number>(new Date().getDate());
+  const [manualTime, setManualTime] = useState<string>('08:00');
+  
+  // Reset calendar when opening context menu
+  useEffect(() => {
+    if (contextMenu) {
+      const today = new Date();
+      setCalendarMonth(today.getMonth());
+      setCalendarYear(today.getFullYear());
+      setCalendarSelectedDay(today.getDate());
+      setManualTime('08:00');
+    }
+  }, [contextMenu]);
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
   const [workloadRange, setWorkloadRange] = useState(14);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
@@ -4141,43 +4155,98 @@ export default function SpacesPage() {
                     {/* Left: Calendar Column */}
                     <div style={{ flex: 1, borderRight: '1px solid #e2e8f0', padding: '12px 0' }}>
                       <div className={styles.calendarHeaderMini}>
-                        <span>May 2026</span>
+                        <span>{new Date(calendarYear, calendarMonth).toLocaleDateString('default', { month: 'long', year: 'numeric' })}</span>
                         <div style={{ display: 'flex', gap: '8px' }}>
-                          <span style={{ cursor: 'pointer' }}>&lt;</span>
-                          <span style={{ cursor: 'pointer' }}>&gt;</span>
+                          <span 
+                            style={{ cursor: 'pointer', userSelect: 'none' }} 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setCalendarMonth(prev => prev === 0 ? 11 : prev - 1);
+                              if (calendarMonth === 0) setCalendarYear(prev => prev - 1);
+                            }}
+                          >
+                            &lt;
+                          </span>
+                          <span 
+                            style={{ cursor: 'pointer', userSelect: 'none' }} 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setCalendarMonth(prev => prev === 11 ? 0 : prev + 1);
+                              if (calendarMonth === 11) setCalendarYear(prev => prev + 1);
+                            }}
+                          >
+                            &gt;
+                          </span>
                         </div>
                       </div>
                       <div className={styles.calendarGridMini}>
                         {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(d => (
                           <div key={d} style={{ fontSize: '9px', fontWeight: 700, textAlign: 'center', color: '#94a3b8', paddingBottom: '4px' }}>{d}</div>
                         ))}
-                        {Array.from({ length: 31 }, (_, i) => i + 1).map(day => (
-                          <div
-                            key={day}
-                            className={`${styles.calendarDayMini} ${manualDate.day === day ? styles.calendarDayMiniActive : ''}`}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setManualDate(prev => ({ ...prev, day }));
-                            }}
-                          >
-                            {day}
-                          </div>
-                        ))}
+                        {(() => {
+                          const now = new Date();
+                          const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                          const daysInMonth = new Date(calendarYear, calendarMonth + 1, 0).getDate();
+                          const firstDayOfMonth = new Date(calendarYear, calendarMonth, 1).getDay();
+                          
+                          const calendarDays: JSX.Element[] = [];
+                          
+                          // Add empty cells for days before the first day of the month
+                          for (let i = 0; i < firstDayOfMonth; i++) {
+                            calendarDays.push(<div key={`empty-${i}`} style={{ visibility: 'hidden' }} />);
+                          }
+                          
+                          // Add days of the month
+                          for (let day = 1; day <= daysInMonth; day++) {
+                            const date = new Date(calendarYear, calendarMonth, day);
+                            const isPast = date < todayStart;
+                            const isSelected = calendarSelectedDay === day;
+                            
+                            calendarDays.push(
+                              <div
+                                key={day}
+                                className={`${styles.calendarDayMini} ${isSelected ? styles.calendarDayMiniActive : ''}`}
+                                style={{
+                                  opacity: isPast ? 0.4 : 1,
+                                  cursor: isPast ? 'not-allowed' : 'pointer'
+                                }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (!isPast) {
+                                    setCalendarSelectedDay(day);
+                                  }
+                                }}
+                              >
+                                {day}
+                              </div>
+                            );
+                          }
+                          
+                          return calendarDays;
+                        })()}
                       </div>
                       <div style={{ padding: '0 12px', display: 'flex', gap: '8px', alignItems: 'center' }} onClick={e => e.stopPropagation()}>
                         <input
                           type="time"
-                          value={manualDate.time}
+                          value={manualTime}
                           className={styles.dateInputSmall}
                           style={{ marginTop: '8px', flex: 1 }}
-                          onChange={(e) => setManualDate(prev => ({ ...prev, time: e.target.value }))}
+                          onChange={(e) => setManualTime(e.target.value)}
                         />
                         <button
                           style={{ marginTop: '8px', padding: '4px 12px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '4px', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}
                           onClick={() => {
-                            const d = new Date(2026, 4, manualDate.day);
-                            const [h, m] = manualDate.time.split(':');
-                            d.setHours(parseInt(h), parseInt(m));
+                            const now = new Date();
+                            const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                            const d = new Date(calendarYear, calendarMonth, calendarSelectedDay);
+                            const [h, m] = manualTime.split(':');
+                            d.setHours(parseInt(h), parseInt(m), 0, 0);
+                            
+                            if (d < todayStart) {
+                              showToast('Please select a future date and time!', 'error');
+                              return;
+                            }
+                            
                             setTaskReminder(contextMenu.id, d);
                             closeContextMenu();
                           }}
