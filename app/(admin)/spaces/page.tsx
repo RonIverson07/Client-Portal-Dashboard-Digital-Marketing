@@ -115,6 +115,7 @@ export default function SpacesPage() {
   const [viewContextMenu, setViewContextMenu] = useState<{ x: number, y: number, view: string } | null>(null);
   const [viewDate, setViewDate] = useState(new Date());
   const [calendarView, setCalendarView] = useState<'month' | 'week' | 'day'>('month');
+  const [ganttViewMode, setGanttViewMode] = useState<'day' | 'week' | 'month' | 'quarter' | 'year'>('day');
   const [isViewDropdownOpen, setIsViewDropdownOpen] = useState(false);
   const addViewBtnRef = useRef<HTMLButtonElement>(null);
   const [addViewDropdownPos, setAddViewDropdownPos] = useState<{ top: number; right: number } | null>(null);
@@ -2630,68 +2631,270 @@ export default function SpacesPage() {
             )}
 
             {activeItem && activeView === 'gantt' && (
-              <div className={styles.ganttContainer}>
-                <div className={styles.ganttSidebar}>
-                  <div className={styles.ganttSidebarHeader}>Task Name</div>
-                  {currentTasks.map(task => (
-                    <div key={task.id} className={styles.ganttSidebarItem}>
-                      <div className={styles.statusIconCircle} style={{ borderColor: getStatusStyles(task.status).color, width: '10px', height: '10px', marginRight: '8px' }}></div>
-                      {task.title}
-                    </div>
+              <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: '12px' }}>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  {(['day', 'week', 'month', 'quarter', 'year'] as const).map(mode => (
+                    <button
+                      key={mode}
+                      onClick={() => setGanttViewMode(mode)}
+                      style={{
+                        padding: '8px 16px',
+                        borderRadius: '8px',
+                        border: ganttViewMode === mode ? '1px solid #2563eb' : '1px solid #e2e8f0',
+                        background: ganttViewMode === mode ? '#eff6ff' : 'white',
+                        color: ganttViewMode === mode ? '#2563eb' : '#475569',
+                        fontSize: '13px',
+                        fontWeight: '600',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease'
+                      }}
+                    >
+                      {mode.charAt(0).toUpperCase() + mode.slice(1)}
+                    </button>
                   ))}
-                </div>
-                <div className={styles.ganttTimeline}>
-                  <div className={styles.ganttTimelineHeader}>
-                    {Array.from({ length: 30 }).map((_, i) => {
-                      const d = new Date(viewDate);
-                      d.setDate(viewDate.getDate() + i);
-                      return (
-                        <div key={i} className={styles.ganttDayColumn}>
-                          <div className={styles.ganttDayName}>{d.toLocaleDateString('default', { weekday: 'short' })}</div>
-                          <div className={styles.ganttDayNumber}>{d.getDate()}</div>
-                        </div>
-                      );
-                    })}
+                  <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <button
+                      onClick={() => {
+                        const newDate = new Date(viewDate);
+                        if (ganttViewMode === 'day') newDate.setDate(newDate.getDate() - 1);
+                        else if (ganttViewMode === 'week') newDate.setDate(newDate.getDate() - 7);
+                        else if (ganttViewMode === 'month') newDate.setMonth(newDate.getMonth() - 1);
+                        else if (ganttViewMode === 'quarter') newDate.setMonth(newDate.getMonth() - 3);
+                        else newDate.setFullYear(newDate.getFullYear() - 1);
+                        setViewDate(newDate);
+                      }}
+                      style={{
+                        padding: '6px 12px',
+                        borderRadius: '6px',
+                        border: '1px solid #e2e8f0',
+                        background: 'white',
+                        cursor: 'pointer',
+                        fontSize: '14px',
+                        fontWeight: '600'
+                      }}
+                    >
+                      ←
+                    </button>
+                    <div style={{
+                      padding: '6px 12px',
+                      borderRadius: '6px',
+                      border: '1px solid #e2e8f0',
+                      background: '#f8fafc',
+                      fontSize: '14px',
+                      fontWeight: '600',
+                      color: '#1e293b',
+                      minWidth: '120px',
+                      textAlign: 'center'
+                    }}>
+                      {(() => {
+                        if (ganttViewMode === 'day') {
+                          return viewDate.toLocaleDateString('default', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+                        } else if (ganttViewMode === 'week') {
+                          const start = new Date(viewDate);
+                          start.setDate(viewDate.getDate() - viewDate.getDay());
+                          const end = new Date(start);
+                          end.setDate(start.getDate() + 6);
+                          return `${start.toLocaleDateString('default', { month: 'short', day: 'numeric' })} - ${end.toLocaleDateString('default', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+                        } else if (ganttViewMode === 'month') {
+                          return viewDate.toLocaleDateString('default', { month: 'long', year: 'numeric' });
+                        } else if (ganttViewMode === 'quarter') {
+                          const q = Math.floor(viewDate.getMonth() / 3) + 1;
+                          return `Q${q} ${viewDate.getFullYear()}`;
+                        } else {
+                          return viewDate.getFullYear().toString();
+                        }
+                      })()}
+                    </div>
+                    <button
+                      onClick={() => {
+                        const newDate = new Date(viewDate);
+                        if (ganttViewMode === 'day') newDate.setDate(newDate.getDate() + 1);
+                        else if (ganttViewMode === 'week') newDate.setDate(newDate.getDate() + 7);
+                        else if (ganttViewMode === 'month') newDate.setMonth(newDate.getMonth() + 1);
+                        else if (ganttViewMode === 'quarter') newDate.setMonth(newDate.getMonth() + 3);
+                        else newDate.setFullYear(newDate.getFullYear() + 1);
+                        setViewDate(newDate);
+                      }}
+                      style={{
+                        padding: '6px 12px',
+                        borderRadius: '6px',
+                        border: '1px solid #e2e8f0',
+                        background: 'white',
+                        cursor: 'pointer',
+                        fontSize: '14px',
+                        fontWeight: '600'
+                      }}
+                    >
+                      →
+                    </button>
                   </div>
-                  <div className={styles.ganttTimelineBody}>
-                    {currentTasks.map(task => {
-                      const startDate = task.startDate ? new Date(task.startDate) : (task.dueDate ? new Date(task.dueDate) : null);
-                      const dueDate = task.dueDate ? new Date(task.dueDate) : (task.startDate ? new Date(task.startDate) : null);
-
-                      let offset = 0;
-                      let width = 100; // Default 1 day
-
-                      if (startDate) {
-                        const startDiff = startDate.getTime() - viewDate.getTime();
-                        offset = Math.floor(startDiff / (1000 * 60 * 60 * 24));
-                      }
-
-                      if (startDate && dueDate) {
-                        const durationDiff = dueDate.getTime() - startDate.getTime();
-                        width = Math.max(100, (Math.floor(durationDiff / (1000 * 60 * 60 * 24)) + 1) * 100);
-                      }
-
-                      return (
-                        <div key={task.id} className={styles.ganttRow}>
-                          {Array.from({ length: 30 }).map((_, i) => (
-                            <div key={i} className={styles.ganttDayCell}></div>
-                          ))}
-                          {(startDate || dueDate) && offset + (width / 100) > 0 && offset < 30 && (
-                            <div
-                              className={styles.ganttBar}
-                              style={{
-                                left: `${offset * 100}px`,
-                                width: `${width}px`,
-                                background: getStatusStyles(task.status).color
-                              }}
-                              title={`${task.title}${startDate ? ' | Start: ' + task.startDate : ''}${dueDate ? ' | Due: ' + task.dueDate : ''}`}
-                            >
-                              {task.title}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
+                </div>
+                <div className={styles.ganttContainer}>
+                  <div className={styles.ganttSidebar}>
+                    <div className={styles.ganttSidebarHeader}>Task Name</div>
+                    {currentTasks.map(task => (
+                      <div key={task.id} className={styles.ganttSidebarItem}>
+                        <div className={styles.statusIconCircle} style={{ borderColor: getStatusStyles(task.status).color, width: '10px', height: '10px', marginRight: '8px' }}></div>
+                        {task.title}
+                      </div>
+                    ))}
+                  </div>
+                  <div className={styles.ganttTimeline}>
+                    <div className={styles.ganttTimelineHeader}>
+                      {(() => {
+                        let columns: { label: string; subLabel: string; start: Date; end: Date }[] = [];
+                        const startDate = new Date(viewDate);
+                        if (ganttViewMode === 'day') {
+                          for (let i = 0; i < 30; i++) {
+                            const d = new Date(startDate);
+                            d.setDate(startDate.getDate() + i);
+                            columns.push({
+                              label: d.toLocaleDateString('default', { weekday: 'short' }),
+                              subLabel: d.getDate().toString(),
+                              start: d,
+                              end: new Date(d.getFullYear(), d.getMonth(), d.getDate())
+                            });
+                          }
+                        } else if (ganttViewMode === 'week') {
+                          startDate.setDate(startDate.getDate() - startDate.getDay());
+                          for (let i = 0; i < 12; i++) {
+                            const d = new Date(startDate);
+                            d.setDate(startDate.getDate() + (i * 7));
+                            const weekEnd = new Date(d);
+                            weekEnd.setDate(d.getDate() + 6);
+                            const weekNum = Math.ceil((d.getDate() + (new Date(d.getFullYear(), d.getMonth(), 1).getDay())) / 7);
+                            columns.push({
+                              label: `W${weekNum}`,
+                              subLabel: `${d.toLocaleDateString('default', { month: 'short', day: 'numeric' })}`,
+                              start: d,
+                              end: weekEnd
+                            });
+                          }
+                        } else if (ganttViewMode === 'month') {
+                          startDate.setDate(1);
+                          for (let i = 0; i < 12; i++) {
+                            const d = new Date(startDate.getFullYear(), startDate.getMonth() + i, 1);
+                            const monthEnd = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+                            columns.push({
+                              label: d.toLocaleDateString('default', { month: 'short' }),
+                              subLabel: d.getFullYear().toString(),
+                              start: d,
+                              end: monthEnd
+                            });
+                          }
+                        } else if (ganttViewMode === 'quarter') {
+                          startDate.setMonth(Math.floor(startDate.getMonth() / 3) * 3);
+                          startDate.setDate(1);
+                          for (let i = 0; i < 8; i++) {
+                            const qStart = new Date(startDate.getFullYear(), startDate.getMonth() + (i * 3), 1);
+                            const qEnd = new Date(qStart.getFullYear(), qStart.getMonth() + 3, 0);
+                            columns.push({
+                              label: `Q${Math.floor(qStart.getMonth() / 3) + 1}`,
+                              subLabel: qStart.getFullYear().toString(),
+                              start: qStart,
+                              end: qEnd
+                            });
+                          }
+                        } else if (ganttViewMode === 'year') {
+                          startDate.setMonth(0);
+                          startDate.setDate(1);
+                          for (let i = 0; i < 10; i++) {
+                            const y = new Date(startDate.getFullYear() + i, 0, 1);
+                            const yEnd = new Date(y.getFullYear(), 11, 31);
+                            columns.push({
+                              label: y.getFullYear().toString(),
+                              subLabel: '',
+                              start: y,
+                              end: yEnd
+                            });
+                          }
+                        }
+                        return columns.map((col, i) => (
+                          <div
+                            key={i}
+                            className={styles.ganttDayColumn}
+                            style={{
+                              width: ganttViewMode === 'day' ? '100px' : ganttViewMode === 'week' ? '150px' : ganttViewMode === 'month' ? '180px' : ganttViewMode === 'quarter' ? '220px' : '280px',
+                              minWidth: ganttViewMode === 'day' ? '100px' : ganttViewMode === 'week' ? '150px' : ganttViewMode === 'month' ? '180px' : ganttViewMode === 'quarter' ? '220px' : '280px',
+                            }}
+                          >
+                            <div className={styles.ganttDayName}>{col.label}</div>
+                            <div className={styles.ganttDayNumber}>{col.subLabel}</div>
+                          </div>
+                        ));
+                      })()}
+                    </div>
+                    <div className={styles.ganttTimelineBody}>
+                      {currentTasks.map(task => {
+                        const startDate = task.startDate ? new Date(task.startDate) : (task.dueDate ? new Date(task.dueDate) : null);
+                        const dueDate = task.dueDate ? new Date(task.dueDate) : (task.startDate ? new Date(task.startDate) : null);
+                        let offset = 0;
+                        let width = 100;
+                        const getColumnWidth = ganttViewMode === 'day' ? 100 : ganttViewMode === 'week' ? 150 : ganttViewMode === 'month' ? 180 : ganttViewMode === 'quarter' ? 220 : 280;
+                        const getStartOfView = (() => {
+                          const d = new Date(viewDate);
+                          if (ganttViewMode === 'week') {
+                            d.setDate(d.getDate() - d.getDay());
+                          } else if (ganttViewMode === 'month') {
+                            d.setDate(1);
+                          } else if (ganttViewMode === 'quarter') {
+                            d.setMonth(Math.floor(d.getMonth() / 3) * 3);
+                            d.setDate(1);
+                          } else if (ganttViewMode === 'year') {
+                            d.setMonth(0);
+                            d.setDate(1);
+                          }
+                          return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+                        })();
+                        const getDateDiff = (d1: Date, d2: Date) => {
+                          if (ganttViewMode === 'day') {
+                            return (d1.getTime() - d2.getTime()) / (1000 * 60 * 60 * 24);
+                          } else if (ganttViewMode === 'week') {
+                            return (d1.getTime() - d2.getTime()) / (1000 * 60 * 60 * 24 * 7);
+                          } else if (ganttViewMode === 'month') {
+                            return (d1.getFullYear() - d2.getFullYear()) * 12 + (d1.getMonth() - d2.getMonth());
+                          } else if (ganttViewMode === 'quarter') {
+                            return (d1.getFullYear() - d2.getFullYear()) * 4 + Math.floor(d1.getMonth() / 3) - Math.floor(d2.getMonth() / 3);
+                          } else {
+                            return d1.getFullYear() - d2.getFullYear();
+                          }
+                        };
+                        if (startDate) {
+                          offset = Math.floor(getDateDiff(startDate, getStartOfView));
+                        }
+                        if (startDate && dueDate) {
+                          const duration = Math.max(1, Math.ceil(getDateDiff(dueDate, startDate)) + 1);
+                          width = duration * getColumnWidth;
+                        }
+                        const colCount = ganttViewMode === 'day' ? 30 : ganttViewMode === 'week' ? 12 : ganttViewMode === 'month' ? 12 : ganttViewMode === 'quarter' ? 8 : 10;
+                        return (
+                          <div key={task.id} className={styles.ganttRow}>
+                            {Array.from({ length: colCount }).map((_, i) => (
+                              <div
+                                key={i}
+                                className={styles.ganttDayCell}
+                                style={{
+                                  width: `${getColumnWidth}px`,
+                                  minWidth: `${getColumnWidth}px`,
+                                }}
+                              ></div>
+                            ))}
+                            {(startDate || dueDate) && offset + (width / getColumnWidth) > 0 && offset < colCount && (
+                              <div
+                                  className={styles.ganttBar}
+                                  style={{
+                                    left: `${offset * getColumnWidth}px`,
+                                    width: `${width}px`,
+                                    background: getStatusStyles(task.status).color
+                                  }}
+                                  title={`${task.title}${startDate ? ' | Start: ' + task.startDate : ''}${dueDate ? ' | Due: ' + task.dueDate : ''}`}
+                                >
+                                </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -4110,11 +4313,6 @@ export default function SpacesPage() {
               <div className={styles.contextMenuItem} onClick={() => { selectAllInGroup(contextMenu.id); closeContextMenu(); }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m9 11 3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>
                 Select all
-              </div>
-
-              <div className={styles.contextMenuItem} onClick={() => { closeContextMenu(); }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="3" /></svg>
-                Edit statuses
               </div>
             </>
           ) : contextMenu.type === 'task' ? (
