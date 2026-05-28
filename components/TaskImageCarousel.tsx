@@ -14,6 +14,7 @@ interface TaskImageCarouselProps {
   onImageClick?: (index: number) => void;
   onIndexChange?: (index: number) => void;
   showEnlargeHint?: boolean;
+  initialIndex?: number;
 }
 
 export function TaskImageCarousel({
@@ -23,17 +24,33 @@ export function TaskImageCarousel({
   onImageClick,
   onIndexChange,
   showEnlargeHint = false,
+  initialIndex = 0,
 }: TaskImageCarouselProps) {
-  const [index, setIndex] = useState(0);
+  const [index, setIndex] = useState(initialIndex);
   const safeImages = images.filter(Boolean);
 
   useEffect(() => {
-    if (index >= safeImages.length) setIndex(0);
-  }, [index, safeImages.length]);
+    const clampedIndex = Math.min(Math.max(initialIndex, 0), safeImages.length - 1);
+    if (clampedIndex !== index) {
+      setIndex(clampedIndex);
+    }
+  }, [initialIndex, safeImages.length]);
+
+  useEffect(() => {
+    if (index >= safeImages.length) {
+      const newIndex = 0;
+      setIndex(newIndex);
+      onIndexChange?.(newIndex);
+    }
+  }, [index, safeImages.length, onIndexChange]);
 
   useEffect(() => {
     onIndexChange?.(index);
   }, [index, onIndexChange]);
+
+  const handleIndexChange = (newIndex: number) => {
+    setIndex(newIndex);
+  };
 
   if (safeImages.length === 0) return null;
 
@@ -43,7 +60,12 @@ export function TaskImageCarousel({
   return (
     <div
       className={styles.wrap}
-      onClick={onImageClick ? () => onImageClick(index) : undefined}
+      onClick={(e) => {
+        console.log('TaskImageCarousel wrap clicked', { onImageClick, index });
+        if (onImageClick) {
+          onImageClick(index);
+        }
+      }}
       role={onImageClick ? 'button' : undefined}
       tabIndex={onImageClick ? 0 : undefined}
       onKeyDown={
@@ -57,15 +79,17 @@ export function TaskImageCarousel({
           : undefined
       }
     >
-      <img
-        src={getDisplayImageUrl(current)}
-        alt={alt}
-        className={`${styles.img} ${className}`.trim()}
-        draggable={false}
-        onError={e => {
-          (e.target as HTMLImageElement).src = FALLBACK_IMG;
-        }}
-      />
+      <div className={styles.imgContainer}>
+        <img
+          src={getDisplayImageUrl(current)}
+          alt={alt}
+          className={`${styles.img} ${className}`.trim()}
+          draggable={false}
+          onError={e => {
+            (e.target as HTMLImageElement).src = FALLBACK_IMG;
+          }}
+        />
+      </div>
       {showEnlargeHint && <div className={styles.enlargeHint}>🔍</div>}
       {hasNav && (
         <>
@@ -74,7 +98,7 @@ export function TaskImageCarousel({
             className={`${styles.navBtn} ${styles.navPrev}`}
             onClick={e => {
               e.stopPropagation();
-              setIndex(prev => (prev - 1 + safeImages.length) % safeImages.length);
+              handleIndexChange((index - 1 + safeImages.length) % safeImages.length);
             }}
             aria-label="Previous image"
           >
@@ -85,7 +109,7 @@ export function TaskImageCarousel({
             className={`${styles.navBtn} ${styles.navNext}`}
             onClick={e => {
               e.stopPropagation();
-              setIndex(prev => (prev + 1) % safeImages.length);
+              handleIndexChange((index + 1) % safeImages.length);
             }}
             aria-label="Next image"
           >

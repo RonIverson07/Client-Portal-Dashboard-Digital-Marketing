@@ -11,7 +11,7 @@ import {
   toDateKey,
 } from '@/lib/workloadUtils';
 import { TaskImageCarousel } from '@/components/TaskImageCarousel';
-import { isGoogleDriveFolderUrl, isGoogleDriveUrl } from '@/lib/imageUtils';
+import { isGoogleDriveFolderUrl, isGoogleDriveUrl, getDisplayImageUrl } from '@/lib/imageUtils';
 import { getTaskImages } from '@/lib/taskImages';
 
 type TaskCoverMode = 'none' | 'image' | 'drive';
@@ -149,6 +149,25 @@ export default function SpacesPage() {
   const [resolvingCoverFolder, setResolvingCoverFolder] = useState(false);
   const [coverPreviewError, setCoverPreviewError] = useState(false);
   const coverFileInputRef = useRef<HTMLInputElement>(null);
+  const [carouselIndices, setCarouselIndices] = useState<Record<string, number>>({});
+  const [isFullScreenPreviewOpen, setIsFullScreenPreviewOpen] = useState(false);
+  const [fullScreenPreviewImages, setFullScreenPreviewImages] = useState<string[]>([]);
+  const [fullScreenPreviewIndex, setFullScreenPreviewIndex] = useState(0);
+
+  const handleCarouselIndexChange = (taskId: string, index: number) => {
+    setCarouselIndices(prev => ({ ...prev, [taskId]: index }));
+  };
+
+  const openFullScreenPreview = (images: string[], index: number) => {
+    console.log('openFullScreenPreview called with', { images, index });
+    setFullScreenPreviewImages(images);
+    setFullScreenPreviewIndex(index);
+    setIsFullScreenPreviewOpen(true);
+  };
+
+  const closeFullScreenPreview = () => {
+    setIsFullScreenPreviewOpen(false);
+  };
 
   // Checklist state
   type ChecklistItem = { id: string; text: string; done: boolean; _pending?: boolean };
@@ -3981,6 +4000,8 @@ export default function SpacesPage() {
                                 images={getModalCoverImages()}
                                 alt="Cover preview"
                                 className={styles.taskCoverPreviewImg}
+                                showEnlargeHint={true}
+                                onImageClick={(index) => openFullScreenPreview(getModalCoverImages(), index)}
                               />
                             ) : (
                               <div className={styles.taskCoverPreviewError}>
@@ -4368,6 +4389,129 @@ export default function SpacesPage() {
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Full-Screen Image Preview */}
+      {isFullScreenPreviewOpen && (
+        <div 
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+            background: 'rgba(0,0,0,0.95)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 99999,
+            cursor: 'pointer'
+          }} 
+          onClick={closeFullScreenPreview}
+        >
+          <button 
+            style={{
+              position: 'absolute',
+              top: 24,
+              right: 24,
+              background: 'transparent',
+              border: 'none',
+              color: 'white',
+              fontSize: 32,
+              cursor: 'pointer',
+              zIndex: 100000
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              closeFullScreenPreview();
+            }}
+          >
+            ×
+          </button>
+          
+          {fullScreenPreviewImages.length > 1 && (
+            <>
+              <button 
+                style={{
+                  position: 'absolute',
+                  left: 24,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'rgba(15,23,42,0.7)',
+                  border: 'none',
+                  color: 'white',
+                  fontSize: 24,
+                  width: 48,
+                  height: 48,
+                  borderRadius: '50%',
+                  cursor: 'pointer',
+                  zIndex: 100000
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setFullScreenPreviewIndex(prev => 
+                    (prev - 1 + fullScreenPreviewImages.length) % fullScreenPreviewImages.length
+                  );
+                }}
+              >
+                ‹
+              </button>
+              <button 
+                style={{
+                  position: 'absolute',
+                  right: 24,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'rgba(15,23,42,0.7)',
+                  border: 'none',
+                  color: 'white',
+                  fontSize: 24,
+                  width: 48,
+                  height: 48,
+                  borderRadius: '50%',
+                  cursor: 'pointer',
+                  zIndex: 100000
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setFullScreenPreviewIndex(prev => 
+                    (prev + 1) % fullScreenPreviewImages.length
+                  );
+                }}
+              >
+                ›
+              </button>
+            </>
+          )}
+          
+          <img 
+            src={getDisplayImageUrl(fullScreenPreviewImages[fullScreenPreviewIndex])}
+            alt="Full screen preview"
+            style={{
+              maxWidth: '90vw',
+              maxHeight: '90vh',
+              objectFit: 'contain',
+              cursor: 'default'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          />
+          
+          {fullScreenPreviewImages.length > 1 && (
+            <div style={{
+              position: 'absolute',
+              bottom: 24,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              color: 'white',
+              background: 'rgba(15,23,42,0.7)',
+              padding: '4px 12px',
+              borderRadius: 999,
+              fontSize: 14
+            }}>
+              {fullScreenPreviewIndex + 1} / {fullScreenPreviewImages.length}
+            </div>
+          )}
         </div>
       )}
 

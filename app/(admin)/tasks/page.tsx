@@ -57,17 +57,40 @@ function ImageCarousel({
   images,
   alt,
   className,
+  initialIndex = 0,
+  onIndexChange,
 }: {
   images: string[];
   alt: string;
   className: string;
+  initialIndex?: number;
+  onIndexChange?: (index: number) => void;
 }) {
-  const [index, setIndex] = useState(0);
+  const [index, setIndex] = useState(initialIndex);
   const safeImages = images.filter(Boolean);
 
   useEffect(() => {
-    if (index >= safeImages.length) setIndex(0);
-  }, [index, safeImages.length]);
+    const clampedIndex = Math.min(Math.max(initialIndex, 0), safeImages.length - 1);
+    if (clampedIndex !== index) {
+      setIndex(clampedIndex);
+      if (clampedIndex !== initialIndex) {
+        onIndexChange?.(clampedIndex);
+      }
+    }
+  }, [initialIndex, safeImages.length, index, onIndexChange]);
+
+  useEffect(() => {
+    if (index < 0 || index >= safeImages.length) {
+      const newIndex = Math.min(Math.max(index, 0), safeImages.length - 1);
+      setIndex(newIndex);
+      onIndexChange?.(newIndex);
+    }
+  }, [index, safeImages.length, onIndexChange]);
+
+  const handleIndexChange = (newIndex: number) => {
+    setIndex(newIndex);
+    onIndexChange?.(newIndex);
+  };
 
   if (safeImages.length === 0) return null;
 
@@ -92,7 +115,7 @@ function ImageCarousel({
             className={`${styles.carouselBtn} ${styles.carouselBtnPrev}`}
             onClick={e => {
               e.stopPropagation();
-              setIndex(prev => (prev - 1 + safeImages.length) % safeImages.length);
+              handleIndexChange((index - 1 + safeImages.length) % safeImages.length);
             }}
             aria-label="Previous image"
           >
@@ -103,7 +126,7 @@ function ImageCarousel({
             className={`${styles.carouselBtn} ${styles.carouselBtnNext}`}
             onClick={e => {
               e.stopPropagation();
-              setIndex(prev => (prev + 1) % safeImages.length);
+              handleIndexChange((index + 1) % safeImages.length);
             }}
             aria-label="Next image"
           >
@@ -145,10 +168,14 @@ function TaskDetailPanel({
   task,
   onClose,
   onStatusChange,
+  initialCarouselIndex = 0,
+  onCarouselIndexChange,
 }: {
   task: Task;
   onClose: () => void;
   onStatusChange: (id: number, status: string) => void;
+  initialCarouselIndex?: number;
+  onCarouselIndexChange?: (index: number) => void;
 }) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [loadingComments, setLoadingComments] = useState(true);
@@ -169,7 +196,13 @@ function TaskDetailPanel({
       </div>
 
       <div className={styles.detailContent}>
-        <ImageCarousel images={getTaskImages(task)} alt={task.title} className={styles.detailImage} />
+        <ImageCarousel 
+          images={getTaskImages(task)} 
+          alt={task.title} 
+          className={styles.detailImage} 
+          initialIndex={initialCarouselIndex}
+          onIndexChange={onCarouselIndexChange}
+        />
         
         <div className={styles.detailMeta}>
           <div className={styles.detailRow}>
@@ -242,6 +275,7 @@ function TasksContent() {
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
   const [imgPreviewError, setImgPreviewError] = useState(false);
   const [resolvingFolder, setResolvingFolder] = useState(false);
+  const [carouselIndices, setCarouselIndices] = useState<Record<number, number>>({});
   
   const [isOverCol, setIsOverCol] = useState<string | null>(null);
   const dragTaskId = useRef<number | null>(null);
@@ -310,6 +344,10 @@ function TasksContent() {
     setToast(msg);
     setTimeout(() => setToast(''), 3000);
   }
+
+  const handleCarouselIndexChange = (taskId: number, index: number) => {
+    setCarouselIndices(prev => ({ ...prev, [taskId]: index }));
+  };
 
   function openCreate() {
     setEditTask(null);
@@ -500,7 +538,13 @@ function TasksContent() {
             <div className={styles.mobileListView}>
               {filteredTasks.map(task => (
                 <div key={task.id} className={styles.mobileAdminCard} onClick={() => setSelectedTask(selectedTask?.id === task.id ? null : task)}>
-                  <ImageCarousel images={getTaskImages(task)} alt={task.title} className={styles.mobileAdminCardImg} />
+                  <ImageCarousel 
+                          images={getTaskImages(task)} 
+                          alt={task.title} 
+                          className={styles.mobileAdminCardImg}
+                          initialIndex={carouselIndices[task.id] || 0}
+                          onIndexChange={(index) => handleCarouselIndexChange(task.id, index)}
+                        />
                   <div className={styles.mobileAdminCardBody}>
                     <div className={styles.mobileAdminCardRow}>
                       <StatusBadge status={task.status} />
@@ -569,11 +613,13 @@ function TasksContent() {
                           onDragStart={e => handleDragStart(e, task.id)}
                         >
                           <div className={styles.taskCardInner} style={{ flexDirection: 'column', gap: 'var(--space-2)', padding: 'var(--space-3)' }}>
-                            <div style={{ position: 'relative', width: '100%', height: 120, borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
+                            <div style={{ position: 'relative', width: '100%', minHeight: 120, borderRadius: 'var(--radius-sm)', overflow: 'visible' }}>
                               <ImageCarousel
                                 images={getTaskImages(task)}
                                 alt={task.title}
                                 className={styles.boardCardImage}
+                                initialIndex={carouselIndices[task.id] || 0}
+                                onIndexChange={(index) => handleCarouselIndexChange(task.id, index)}
                               />
                             </div>
                             <div className={styles.taskInfo} style={{ width: '100%' }}>
@@ -606,6 +652,8 @@ function TasksContent() {
             task={selectedTask}
             onClose={() => setSelectedTask(null)}
             onStatusChange={handleStatusChange}
+            initialCarouselIndex={carouselIndices[selectedTask.id] || 0}
+            onCarouselIndexChange={(index) => handleCarouselIndexChange(selectedTask.id, index)}
           />
         )}
       </div>
