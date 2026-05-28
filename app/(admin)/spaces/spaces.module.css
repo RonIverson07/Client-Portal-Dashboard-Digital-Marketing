@@ -272,7 +272,29 @@
   flex-direction: column;
   gap: 12px;
   min-height: 200px;
+  max-height: calc(100vh - 200px);
+  overflow-y: auto;
   transition: all 0.3s ease;
+}
+
+/* Custom scrollbar for board columns */
+.boardColumn::-webkit-scrollbar {
+  width: 6px;
+}
+
+.boardColumn::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 3px;
+}
+
+.boardColumn::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+  cursor: grab;
+}
+
+.boardColumn::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
 }
 
 .boardColumnCollapsed {
