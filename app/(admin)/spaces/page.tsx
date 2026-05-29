@@ -3178,43 +3178,10 @@ export default function SpacesPage() {
                               </div>
                               <div style={{ fontSize: '16px', fontWeight: 700, color: '#0f172a' }}>{member}</div>
                             </div>
-                            <div style={{ display: 'flex', gap: '8px' }}>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setExpandedTeamMembers(prev => ({ ...prev, [member]: !(prev[member] ?? true) }));
-                                }}
-                                style={{
-                                  width: '32px',
-                                  height: '32px',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  borderRadius: '6px',
-                                  border: 'none',
-                                  background: 'transparent',
-                                  cursor: 'pointer',
-                                  transition: 'background-color 0.2s ease',
-                                }}
-                                onMouseEnter={(e) => {
-                                  (e.currentTarget as HTMLElement).style.backgroundColor = '#f1f5f9';
-                                }}
-                                onMouseLeave={(e) => {
-                                  (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent';
-                                }}
-                              >
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2" style={{
-                                  transform: (expandedTeamMembers[member] ?? true) ? 'rotate(0deg)' : 'rotate(180deg)',
-                                  transition: 'transform 0.2s ease',
-                                }}>
-                                  <path d="M6 9l6 6 6-6M6 15l6 6 6-6" />
-                                </svg>
-                              </button>
-                            </div>
+
                           </div>
 
-                          {(expandedTeamMembers[member] ?? true) && (
-                            <div className={styles.memberBody}>
+                          <div className={styles.memberBody}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
                               <div style={{ display: 'flex', gap: '24px' }}>
                                 <div>
@@ -3283,7 +3250,6 @@ export default function SpacesPage() {
                               })}
                             </div>
                           </div>
-                        )}
                         </div>
                       );
                     });
