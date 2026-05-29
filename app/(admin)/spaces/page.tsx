@@ -130,6 +130,39 @@ export default function SpacesPage() {
   const [calendarYear, setCalendarYear] = useState<number>(new Date().getFullYear());
   const [calendarSelectedDay, setCalendarSelectedDay] = useState<number>(new Date().getDate());
   const [manualTime, setManualTime] = useState<string>('08:00');
+  const dashboardRef = useRef<HTMLDivElement>(null);
+  
+  const getFullPath = () => {
+    if (!activeItem) return 'Overview';
+    const path: string[] = [];
+    if (activeItem.type === 'list') {
+      const list = lists.find(l => l.id === activeItem.id);
+      if (list) {
+        path.unshift(list.name);
+        if (list.parentId) {
+          const folder = folders.find(f => f.id === list.parentId);
+          if (folder) {
+            path.unshift(folder.name);
+            path.unshift(spaces.find(s => s.id === folder.spaceId)?.name || '');
+          } else {
+            path.unshift(spaces.find(s => s.id === list.parentId)?.name || '');
+          }
+        }
+      }
+    } else if (activeItem.type === 'folder') {
+      const folder = folders.find(f => f.id === activeItem.id);
+      if (folder) {
+        path.unshift(folder.name);
+        path.unshift(spaces.find(s => s.id === folder.spaceId)?.name || '');
+      }
+    } else if (activeItem.type === 'space') {
+      const space = spaces.find(s => s.id === activeItem.id);
+      if (space) {
+        path.unshift(space.name);
+      }
+    }
+    return path.filter(Boolean).join('/');
+  };
   
   // Reset calendar when opening context menu
   useEffect(() => {
@@ -263,6 +296,22 @@ export default function SpacesPage() {
           console.error('Failed to load dismissed activities', e);
         }
       }
+      const savedTeamMembers = localStorage.getItem('expanded_team_members');
+      if (savedTeamMembers) {
+        try {
+          setExpandedTeamMembers(JSON.parse(savedTeamMembers));
+        } catch (e) {
+          console.error('Failed to load expanded team members', e);
+        }
+      }
+      const savedTeamStatuses = localStorage.getItem('expanded_team_statuses');
+      if (savedTeamStatuses) {
+        try {
+          setExpandedTeamStatuses(JSON.parse(savedTeamStatuses));
+        } catch (e) {
+          console.error('Failed to load expanded team statuses', e);
+        }
+      }
       setMindMapParents(loadMindMapParents());
       setIsHydrated(true);
     }
@@ -274,8 +323,10 @@ export default function SpacesPage() {
       localStorage.setItem('spaces_view_config', JSON.stringify(config));
       localStorage.setItem('followed_task_ids', JSON.stringify(followedTaskIds));
       localStorage.setItem('dismissed_activity_ids', JSON.stringify(dismissedActivityIds));
+      localStorage.setItem('expanded_team_members', JSON.stringify(expandedTeamMembers));
+      localStorage.setItem('expanded_team_statuses', JSON.stringify(expandedTeamStatuses));
     }
-  }, [pinnedViews, pinnedViewIds, activeView, followedTaskIds, dismissedActivityIds, isHydrated]);
+  }, [pinnedViews, pinnedViewIds, activeView, followedTaskIds, dismissedActivityIds, expandedTeamMembers, expandedTeamStatuses, isHydrated]);
 
   // Handle clicks outside to close dropdowns/menus
   useEffect(() => {
@@ -1396,6 +1447,47 @@ export default function SpacesPage() {
     }
   };
 
+  const downloadCSV = (tasksToExport: typeof currentTasks) => {
+    // Format date for Excel (YYYY-MM-DD)
+    const formatDateForCSV = (dateStr: string | null | undefined) => {
+      if (!dateStr) return '';
+      const date = new Date(dateStr);
+      if (isNaN(date.getTime())) return dateStr;
+      return date.toISOString().split('T')[0];
+    };
+
+    // CSV Headers
+    const headers = ['Title', 'Description', 'Assignee', 'Status', 'Due Date', 'Priority', 'Start Date'];
+    
+    // CSV Rows
+    const rows = tasksToExport.map(task => [
+      task.title,
+      task.description || '',
+      formatAssignee(task.assignee),
+      task.status,
+      formatDateForCSV(task.dueDate),
+      task.priority || 'Normal',
+      formatDateForCSV(task.startDate)
+    ]);
+    
+    // Combine headers and rows
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(field => `"${String(field).replace(/"/g, '""')}"`).join(','))
+    ].join('\n');
+    
+    // Create download link
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'tasks.csv');
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const [collapsedStatuses, setCollapsedStatuses] = useState<Record<string, boolean>>({});
   const toggleStatusCollapse = (status: string) => {
     setCollapsedStatuses((prev: Record<string, boolean>) => ({ ...prev, [status]: !prev[status] }));
@@ -1631,9 +1723,7 @@ export default function SpacesPage() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <div style={{ fontSize: '24px', fontWeight: 700, color: '#0f172a' }}>
-                  {activeItem?.type === 'list' ? lists.find(l => l.id === activeItem.id)?.name :
-                    activeItem?.type === 'folder' ? folders.find(f => f.id === activeItem.id)?.name :
-                      activeItem?.type === 'space' ? spaces.find(s => s.id === activeItem.id)?.name : 'Overview'}
+                  {getFullPath()}
                 </div>
               </div>
 
@@ -2138,15 +2228,41 @@ export default function SpacesPage() {
                       style={{ paddingLeft: '36px' }}
                     />
                   </div>
-                  <select
-                    className={styles.filterSelect}
-                    value={listStatusFilter}
-                    onChange={e => setListStatusFilter(e.target.value)}
-                    style={{ width: '160px' }}
-                  >
-                    <option value="All">All Statuses</option>
-                    {statuses.map(s => <option key={s} value={s}>{s}</option>)}
-                  </select>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <select
+                      className={styles.filterSelect}
+                      value={listStatusFilter}
+                      onChange={e => setListStatusFilter(e.target.value)}
+                      style={{ width: '160px' }}
+                    >
+                      <option value="All">All Statuses</option>
+                      {statuses.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                    <button
+                      className={styles.restoreBtn}
+                      onClick={() => {
+                        const filteredTasks = currentTasks
+                          .filter(t => listStatusFilter === 'All' || t.status === listStatusFilter)
+                          .filter(t => 
+                            t.title.toLowerCase().includes(listSearchQuery.toLowerCase()) ||
+                            (t.description && t.description.toLowerCase().includes(listSearchQuery.toLowerCase())) ||
+                            (t.assignee && t.assignee.toLowerCase().includes(listSearchQuery.toLowerCase()))
+                          );
+                        downloadCSV(filteredTasks);
+                      }}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '6px 12px',
+                        fontSize: '13px',
+                        fontWeight: 600
+                      }}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+                      Download as CSV
+                    </button>
+                  </div>
                 </div>
 
                 <div className={styles.listViewContainer}>
@@ -2906,33 +3022,58 @@ export default function SpacesPage() {
 
             {activeItem && activeView === 'table' && (
               <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-                <div style={{ display: 'flex', gap: '12px', padding: '0 0 16px 0' }}>
-                  <select
-                    value={tableAssigneeFilter}
-                    onChange={e => setTableAssigneeFilter(e.target.value)}
-                    style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '13px', outline: 'none', background: '#fff', cursor: 'pointer', color: '#1e293b' }}
-                  >
-                    <option value="All">All Assignees</option>
-                    {Array.from(new Set(tasks.map(t => formatAssignee(t.assignee)))).map(a => <option key={a} value={a}>{a}</option>)}
-                  </select>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', padding: '0 0 16px 0' }}>
+                  <div style={{ display: 'flex', gap: '12px' }}>
+                    <select
+                      value={tableAssigneeFilter}
+                      onChange={e => setTableAssigneeFilter(e.target.value)}
+                      style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '13px', outline: 'none', background: '#fff', cursor: 'pointer', color: '#1e293b' }}
+                    >
+                      <option value="All">All Assignees</option>
+                      {Array.from(new Set(tasks.map(t => formatAssignee(t.assignee)))).map(a => <option key={a} value={a}>{a}</option>)}
+                    </select>
 
-                  <select
-                    value={tableStatusFilter}
-                    onChange={e => setTableStatusFilter(e.target.value)}
-                    style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '13px', outline: 'none', background: '#fff', cursor: 'pointer', color: '#1e293b' }}
-                  >
-                    <option value="All">All Statuses</option>
-                    {statuses.map(s => <option key={s} value={s}>{s}</option>)}
-                  </select>
+                    <select
+                      value={tableStatusFilter}
+                      onChange={e => setTableStatusFilter(e.target.value)}
+                      style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '13px', outline: 'none', background: '#fff', cursor: 'pointer', color: '#1e293b' }}
+                    >
+                      <option value="All">All Statuses</option>
+                      {statuses.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
 
-                  <select
-                    value={tablePriorityFilter}
-                    onChange={e => setTablePriorityFilter(e.target.value)}
-                    style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '13px', outline: 'none', background: '#fff', cursor: 'pointer', color: '#1e293b' }}
+                    <select
+                      value={tablePriorityFilter}
+                      onChange={e => setTablePriorityFilter(e.target.value)}
+                      style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '13px', outline: 'none', background: '#fff', cursor: 'pointer', color: '#1e293b' }}
+                    >
+                      <option value="All">All Priorities</option>
+                      {PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
+                    </select>
+                  </div>
+                  <button
+                    className={styles.restoreBtn}
+                    onClick={() => {
+                      const filteredTasks = currentTasks.filter(task => {
+                        if (tableAssigneeFilter !== 'All' && formatAssignee(task.assignee) !== tableAssigneeFilter) return false;
+                        if (tableStatusFilter !== 'All' && task.status !== tableStatusFilter) return false;
+                        if (tablePriorityFilter !== 'All' && (task.priority || 'Normal') !== tablePriorityFilter) return false;
+                        return true;
+                      });
+                      downloadCSV(filteredTasks);
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '6px 12px',
+                      fontSize: '13px',
+                      fontWeight: 600
+                    }}
                   >
-                    <option value="All">All Priorities</option>
-                    {PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
-                  </select>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+                    Download as CSV
+                  </button>
                 </div>
 
                 <div className={styles.tableViewContainer}>
@@ -2997,7 +3138,7 @@ export default function SpacesPage() {
             )}
 
             {activeItem && activeView === 'dashboard' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+              <div ref={dashboardRef} style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
                 {/* Stats Row */}
                 <div className={styles.statsRow}>
                   <div className={styles.statCard} style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
@@ -3178,10 +3319,43 @@ export default function SpacesPage() {
                               </div>
                               <div style={{ fontSize: '16px', fontWeight: 700, color: '#0f172a' }}>{member}</div>
                             </div>
-
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setExpandedTeamMembers(prev => ({ ...prev, [member]: !(prev[member] ?? true) }));
+                                }}
+                                style={{
+                                  width: '32px',
+                                  height: '32px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  borderRadius: '6px',
+                                  border: 'none',
+                                  background: 'transparent',
+                                  cursor: 'pointer',
+                                  transition: 'background-color 0.2s ease',
+                                }}
+                                onMouseEnter={(e) => {
+                                  (e.currentTarget as HTMLElement).style.backgroundColor = '#f1f5f9';
+                                }}
+                                onMouseLeave={(e) => {
+                                  (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent';
+                                }}
+                              >
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2" style={{
+                                  transform: (expandedTeamMembers[member] ?? true) ? 'rotate(180deg)' : 'rotate(0deg)',
+                                  transition: 'transform 0.2s ease',
+                                }}>
+                                  <path d="M6 9l6 6 6-6M6 15l6 6 6-6" />
+                                </svg>
+                              </button>
+                            </div>
                           </div>
 
-                          <div className={styles.memberBody}>
+                          {(expandedTeamMembers[member] ?? true) && (
+                            <div className={styles.memberBody}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
                               <div style={{ display: 'flex', gap: '24px' }}>
                                 <div>
@@ -3250,6 +3424,7 @@ export default function SpacesPage() {
                               })}
                             </div>
                           </div>
+                        )}
                         </div>
                       );
                     });
@@ -4040,10 +4215,6 @@ export default function SpacesPage() {
                                     fontWeight: 700,
                                   }}
                                 >
-                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                    <path d="M9 14l-5-5h13" />
-                                    <path d="M9 10h5a5 5 0 0 1 5 5v5" />
-                                  </svg>
                                   Restore
                                 </button>
                               </div>
@@ -4762,6 +4933,29 @@ export default function SpacesPage() {
           onClick={e => e.stopPropagation()}
         >
           <div className={styles.contextMenuHeader}>VIEW OPTIONS</div>
+          {viewContextMenu.view === 'dashboard' && (
+            <div className={styles.contextMenuItem} onClick={() => {
+              const element = dashboardRef.current;
+              if (element) {
+                import('html2pdf.js').then((html2pdf) => {
+                  html2pdf.default()
+                    .set({
+                      margin: 10,
+                      filename: 'dashboard-report.pdf',
+                      image: { type: 'jpeg', quality: 0.98 },
+                      html2canvas: { scale: 2, useCORS: true },
+                      jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
+                    })
+                    .from(element)
+                    .save();
+                });
+              }
+              setViewContextMenu(null);
+            }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+              Download as PDF
+            </div>
+          )}
           <div className={styles.contextMenuItem} onClick={() => {
             const isPinned = pinnedViewIds.includes(viewContextMenu.view);
             let newPinnedViewIds: string[];

@@ -16,6 +16,7 @@
     "@types/jsonwebtoken": "^9.0.10",
     "bcryptjs": "^3.0.3",
     "better-sqlite3": "^12.9.0",
+    "html2pdf.js": "^0.14.0",
     "jsonwebtoken": "^9.0.3",
     "nanoid": "^3.3.12",
     "next": "14.2.35",
