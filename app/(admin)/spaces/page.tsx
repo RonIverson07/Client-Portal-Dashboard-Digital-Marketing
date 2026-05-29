@@ -159,6 +159,10 @@ export default function SpacesPage() {
   const [listStatusFilter, setListStatusFilter] = useState<string>('All');
   const [listSearchQuery, setListSearchQuery] = useState<string>('');
   const [teamSearchQuery, setTeamSearchQuery] = useState<string>('');
+  const [activitySearchQuery, setActivitySearchQuery] = useState<string>('');
+  const [archivedSearchQuery, setArchivedSearchQuery] = useState<string>('');
+  const [archivedSortBy, setArchivedSortBy] = useState<string>('archived-desc');
+  const [expandedTeamMembers, setExpandedTeamMembers] = useState<Record<string, boolean>>({});
   const [workloadSearchQuery, setWorkloadSearchQuery] = useState<string>('');
   const [draggedTask, setDraggedTask] = useState<SpaceTask | null>(null);
   const [hoveredWorkloadCell, setHoveredWorkloadCell] = useState<{ assignee: string; date: string } | null>(null);
@@ -3175,10 +3179,42 @@ export default function SpacesPage() {
                               <div style={{ fontSize: '16px', fontWeight: 700, color: '#0f172a' }}>{member}</div>
                             </div>
                             <div style={{ display: 'flex', gap: '8px' }}>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setExpandedTeamMembers(prev => ({ ...prev, [member]: !(prev[member] ?? true) }));
+                                }}
+                                style={{
+                                  width: '32px',
+                                  height: '32px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  borderRadius: '6px',
+                                  border: 'none',
+                                  background: 'transparent',
+                                  cursor: 'pointer',
+                                  transition: 'background-color 0.2s ease',
+                                }}
+                                onMouseEnter={(e) => {
+                                  (e.currentTarget as HTMLElement).style.backgroundColor = '#f1f5f9';
+                                }}
+                                onMouseLeave={(e) => {
+                                  (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent';
+                                }}
+                              >
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2" style={{
+                                  transform: (expandedTeamMembers[member] ?? true) ? 'rotate(0deg)' : 'rotate(180deg)',
+                                  transition: 'transform 0.2s ease',
+                                }}>
+                                  <path d="M6 9l6 6 6-6M6 15l6 6 6-6" />
+                                </svg>
+                              </button>
                             </div>
                           </div>
 
-                          <div className={styles.memberBody}>
+                          {(expandedTeamMembers[member] ?? true) && (
+                            <div className={styles.memberBody}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
                               <div style={{ display: 'flex', gap: '24px' }}>
                                 <div>
@@ -3206,14 +3242,14 @@ export default function SpacesPage() {
                                 const statusTasks = memberTasks.filter(t => t.status === status);
                                 if (statusTasks.length === 0) return null;
                                 const expandedKey = `${member}-${status}`;
-                                const isExpanded = expandedTeamStatuses[expandedKey];
+                                const isExpanded = expandedTeamStatuses[expandedKey] ?? true;
 
                                 return (
                                   <div key={status} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                     <div
                                       className={styles.memberStatusRow}
                                       style={{ cursor: 'pointer' }}
-                                      onClick={() => setExpandedTeamStatuses(prev => ({ ...prev, [expandedKey]: !prev[expandedKey] }))}
+                                      onClick={() => setExpandedTeamStatuses(prev => ({ ...prev, [expandedKey]: !(prev[expandedKey] ?? true) }))}
                                     >
                                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: '#94a3b8', transform: isExpanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' }}>
@@ -3247,6 +3283,7 @@ export default function SpacesPage() {
                               })}
                             </div>
                           </div>
+                        )}
                         </div>
                       );
                     });
@@ -3259,15 +3296,43 @@ export default function SpacesPage() {
               <div className={styles.activityContainer}>
                 <div style={{ fontSize: '20px', fontWeight: 700, color: '#0f172a', marginBottom: '24px' }}>Activity</div>
 
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px', gap: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, maxWidth: '300px', position: 'relative' }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ position: 'absolute', left: '12px', color: '#94a3b8' }}>
+                      <circle cx="11" cy="11" r="8" />
+                      <path d="m21 21-4.35-4.35" />
+                    </svg>
+                    <input
+                      type="text"
+                      placeholder="Search activity..."
+                      className={styles.filterSelect}
+                      value={activitySearchQuery}
+                      onChange={e => setActivitySearchQuery(e.target.value)}
+                      style={{ paddingLeft: '36px' }}
+                    />
+                  </div>
+                </div>
+
                 {(() => {
-                  const filteredLogs = activityLogs.filter(log => currentTasks.some(t => t.id === log.task_id));
+                  let filteredLogs = activityLogs.filter(log => currentTasks.some(t => t.id === log.task_id));
+
+                  if (activitySearchQuery.trim()) {
+                    const query = activitySearchQuery.toLowerCase();
+                    filteredLogs = filteredLogs.filter(log => {
+                      const task = tasks.find(t => t.id === log.task_id);
+                      const taskTitle = task ? task.title.toLowerCase() : 'deleted task';
+                      const listName = task ? (lists.find(l => l.id === task.listId)?.name || 'general').toLowerCase() : 'n/a';
+                      const logContent = `${log.action_type} ${log.previous_value || ''} ${log.new_value || ''}`.toLowerCase();
+                      return taskTitle.includes(query) || listName.includes(query) || logContent.includes(query);
+                    });
+                  }
 
                   if (filteredLogs.length === 0) {
                     return (
                       <div className={styles.emptyInbox}>
                         <div className={styles.emptyInboxIcon}>📋</div>
-                        <h3>No activity in this {activeItem.type} yet</h3>
-                        <p>Actions like moving tasks or changing statuses within this {activeItem.type} will appear here.</p>
+                        <h3>{activitySearchQuery.trim() ? 'No activity found' : `No activity in this ${activeItem.type} yet`}</h3>
+                        <p>{activitySearchQuery.trim() ? 'Try adjusting your search terms.' : `Actions like moving tasks or changing statuses within this ${activeItem.type} will appear here.`}</p>
                       </div>
                     );
                   }
@@ -3846,38 +3911,182 @@ export default function SpacesPage() {
                   <h2 style={{ fontSize: '20px', fontWeight: 700, color: '#0f172a', marginBottom: '8px' }}>Archived Tasks</h2>
                   <p style={{ color: '#64748b', fontSize: '14px', marginBottom: '24px' }}>Tasks in this list are hidden from your active workspace. You can restore them at any time.</p>
 
-                  <div className={styles.inboxList}>
-                    {currentTasks.length === 0 ? (
-                      <div className={styles.emptyInbox}>
-                        <div className={styles.emptyInboxIcon}>📁</div>
-                        <h3>No archived tasks</h3>
-                        <p>Archive tasks to keep your views clean and organized.</p>
-                      </div>
-                    ) : (
-                      currentTasks.map(task => (
-                        <div key={task.id} className={styles.inboxItem}>
-                          <div className={styles.inboxItemStatus} style={{ background: getStatusStyles(task.status).bg }}></div>
-                          <div className={styles.inboxItemContent}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase' }}>{task.status}</span>
-                                <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 700 }}>📦 ARCHIVED</span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px', gap: '12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, maxWidth: '300px', position: 'relative' }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ position: 'absolute', left: '12px', color: '#94a3b8' }}>
+                        <circle cx="11" cy="11" r="8" />
+                        <path d="m21 21-4.35-4.35" />
+                      </svg>
+                      <input
+                        type="text"
+                        placeholder="Search archived tasks..."
+                        className={styles.filterSelect}
+                        value={archivedSearchQuery}
+                        onChange={(e) => setArchivedSearchQuery(e.target.value)}
+                        style={{ paddingLeft: '36px' }}
+                      />
+                    </div>
+                    <select
+                      className={styles.filterSelect}
+                      value={archivedSortBy}
+                      onChange={(e) => setArchivedSortBy(e.target.value as any)}
+                      style={{ width: '160px' }}
+                    >
+                      <option value="archived-desc">Newest Archive</option>
+                      <option value="archived-asc">Oldest Archive</option>
+                      <option value="name-asc">Name: A-Z</option>
+                      <option value="name-desc">Name: Z-A</option>
+                    </select>
+                  </div>
+
+                  {(() => {
+                    // Create map of task archive dates
+                    const taskArchiveDateMap: Record<string, string> = {};
+                    activityLogs.forEach(log => {
+                      if (log.action_type === 'archive') {
+                        if (!taskArchiveDateMap[log.task_id] || new Date(log.created_at) > new Date(taskArchiveDateMap[log.task_id])) {
+                          taskArchiveDateMap[log.task_id] = log.created_at;
+                        }
+                      }
+                    });
+
+                    // Process tasks for display (search/sort)
+                    let processedArchivedTasks = [...currentTasks];
+
+                    // Apply search filter
+                    if (archivedSearchQuery.trim()) {
+                      processedArchivedTasks = processedArchivedTasks.filter(task =>
+                        task.title.toLowerCase().includes(archivedSearchQuery.toLowerCase()) ||
+                        (task.description && task.description.toLowerCase().includes(archivedSearchQuery.toLowerCase()))
+                      );
+                    }
+
+                    // Apply sort
+                    processedArchivedTasks.sort((a, b) => {
+                      const aArchiveDate = taskArchiveDateMap[a.id] ? new Date(taskArchiveDateMap[a.id]).getTime() : 0;
+                      const bArchiveDate = taskArchiveDateMap[b.id] ? new Date(taskArchiveDateMap[b.id]).getTime() : 0;
+
+                      switch (archivedSortBy) {
+                        case 'name-asc':
+                          return a.title.localeCompare(b.title);
+                        case 'name-desc':
+                          return b.title.localeCompare(a.title);
+                        case 'archived-asc':
+                          return aArchiveDate - bArchiveDate;
+                        case 'archived-desc':
+                        default:
+                          return bArchiveDate - aArchiveDate;
+                      }
+                    });
+
+                    return (
+                      <div className={styles.inboxList}>
+                        {processedArchivedTasks.length === 0 ? (
+                          <div className={styles.emptyInbox}>
+                            <div className={styles.emptyInboxIcon}>📁</div>
+                            <h3>{archivedSearchQuery ? 'No matching tasks found' : 'No archived tasks'}</h3>
+                            <p>{archivedSearchQuery ? 'Try adjusting your search terms.' : 'Archive tasks to keep your views clean and organized.'}</p>
+                          </div>
+                        ) : (
+                          processedArchivedTasks.map(task => (
+                            <div
+                              key={task.id}
+                              className={styles.inboxItem}
+                              style={{
+                                transition: 'transform 0.15s ease, boxShadow 0.15s ease',
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.transform = 'translateX(4px)';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.transform = 'translateX(0)';
+                              }}
+                            >
+                              <div className={styles.inboxItemStatus} style={{
+                                background: getStatusStyles(task.status).bg,
+                                borderRadius: '4px',
+                                marginLeft: '4px',
+                                width: '6px',
+                              }}></div>
+                              <div className={styles.inboxItemContent} style={{ flex: 1, padding: '4px 0' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '6px' }}>
+                                  <span style={{
+                                    fontSize: '12px',
+                                    fontWeight: 700,
+                                    color: getStatusStyles(task.status).color,
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '0.03em',
+                                  }}>{task.status}</span>
+                                  <span style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                    fontSize: '11px',
+                                    color: '#94a3b8',
+                                    fontWeight: 700,
+                                    backgroundColor: '#f1f5f9',
+                                    padding: '2px 6px',
+                                    borderRadius: '4px',
+                                  }}>
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2">
+                                      <path d="M20.5 21h-17A1.5 1.5 0 0 1 2 19.5V10.5a1.5 1.5 0 0 1 1.5-1.5h17a1.5 1.5 0 0 1 1.5 1.5v9a1.5 1.5 0 0 1-1.5 1.5Z" />
+                                      <path d="M20 9V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v2" />
+                                    </svg>
+                                    Archived
+                                  </span>
+                                </div>
+                                <div style={{ fontSize: '16px', fontWeight: 700, color: '#0f172a', marginBottom: '6px' }}>{task.title}</div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+                                  {taskArchiveDateMap[task.id] && (
+                                    <div style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '6px',
+                                      fontSize: '13px',
+                                      color: '#64748b',
+                                      backgroundColor: '#f1f5f9',
+                                      padding: '4px 10px',
+                                      borderRadius: '8px',
+                                      fontWeight: 500,
+                                    }}>
+                                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2">
+                                        <path d="M20.5 21h-17A1.5 1.5 0 0 1 2 19.5V10.5a1.5 1.5 0 0 1 1.5-1.5h17a1.5 1.5 0 0 1 1.5 1.5v9a1.5 1.5 0 0 1-1.5 1.5Z" />
+                                        <path d="M20 9V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v2" />
+                                      </svg>
+                                      Archived on {new Date(taskArchiveDateMap[task.id]).toLocaleDateString(undefined, {
+                                        month: 'short',
+                                        day: 'numeric',
+                                        year: 'numeric'
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                              <div className={styles.archivedItemActions}>
+                                <button
+                                  className={styles.restoreBtn}
+                                  onClick={() => unarchiveTask(task.id)}
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                    padding: '10px 20px',
+                                    fontWeight: 700,
+                                  }}
+                                >
+                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <path d="M9 14l-5-5h13" />
+                                    <path d="M9 10h5a5 5 0 0 1 5 5v5" />
+                                  </svg>
+                                  Restore
+                                </button>
                               </div>
                             </div>
-                            <div style={{ fontSize: '15px', fontWeight: 600, color: '#1e293b', marginBottom: '4px' }}>{task.title}</div>
-                          </div>
-                          <div className={styles.archivedItemActions}>
-                            <button
-                              className={styles.restoreBtn}
-                              onClick={() => unarchiveTask(task.id)}
-                            >
-                              Restore Task
-                            </button>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
+                          ))
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             )}
