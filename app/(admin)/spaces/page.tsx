@@ -26,7 +26,7 @@ const getViewLabel = (view: string) => {
 // Interfaces for our local structural state
 interface Space { id: string; name: string; color?: string; }
 interface Folder { id: string; spaceId: string; name: string; color?: string; }
-interface List { id: string; parentId: string; name: string; color?: string; }
+interface List { id: string; parentId: string; name: string; color?: string; icon?: keyof typeof listIcons; }
 interface SpaceTask {
   id: string;
   listId: string;
@@ -58,6 +58,179 @@ interface ActivityLog {
 }
 
 const FOLDER_COLORS = ['#f59e0b', '#3b82f6', '#10b981', '#ef4444', '#8b5cf6', '#ec4899', '#6366f1'];
+
+// Define SVG icons for lists
+const listIcons = {
+  'clipboard': (color: string) => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="8" y="3" width="12" height="18" rx="2" />
+      <path d="M16 3a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2" />
+      <line x1="12" y1="10" x2="12" y2="14" />
+      <line x1="10" y1="12" x2="14" y2="12" />
+    </svg>
+  ),
+  'clipboard-list': (color: string) => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="8" y="3" width="12" height="18" rx="2" />
+      <path d="M16 3a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2" />
+      <line x1="10" y1="10" x2="16" y2="10" />
+      <line x1="10" y1="14" x2="16" y2="14" />
+      <line x1="10" y1="18" x2="12" y2="18" />
+    </svg>
+  ),
+  'folder': (color: string) => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M22 19a2 2 0 0 1-2-2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+    </svg>
+  ),
+  'folder-open': (color: string) => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-6l-2-2H5a2 2 0 0 0-2 2z" />
+    </svg>
+  ),
+  'pushpin': (color: string) => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21.21 15.89l-3.1 3.1a1 1 0 0 1-1.41 0l-2.12-2.12a1 1 0 0 1 0-1.41l7.07-7.07a1 1 0 0 1 1.41 0l2.12 2.12a1 1 0 0 1 0 1.41z" />
+      <path d="M9.9 10.51L3 17.41" />
+      <path d="M14.49 5.1l-3.09 3.09" />
+    </svg>
+  ),
+  'map-pin': (color: string) => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+      <circle cx="12" cy="10" r="3" />
+    </svg>
+  ),
+  'calendar': (color: string) => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+      <line x1="16" y1="2" x2="16" y2="6" />
+      <line x1="8" y1="2" x2="8" y2="6" />
+      <line x1="3" y1="10" x2="21" y2="10" />
+    </svg>
+  ),
+  'calendar-days': (color: string) => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+      <line x1="16" y1="2" x2="16" y2="6" />
+      <line x1="8" y1="2" x2="8" y2="6" />
+      <line x1="3" y1="10" x2="21" y2="10" />
+      <rect x="8" y="14" width="2" height="2" />
+      <rect x="14" y="14" width="2" height="2" />
+      <rect x="8" y="18" width="2" height="2" />
+      <rect x="14" y="18" width="2" height="2" />
+    </svg>
+  ),
+  'briefcase': (color: string) => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
+      <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+    </svg>
+  ),
+  'lightbulb': (color: string) => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 18h6" />
+      <path d="M10 22h4" />
+      <path d="M15.09 14c.27.66.41 1.38.41 2.12 0 2.21-1.8 4-4 4s-4-1.79-4-4c0-.74.14-1.46.41-2.12" />
+      <path d="M12 2a7 7 0 0 0-7 7c0 2.38 1.19 4.47 3 5.74V17a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-2.26c1.81-1.27 3-3.36 3-5.74a7 7 0 0 0-7-7z" />
+    </svg>
+  ),
+  'alert-triangle': (color: string) => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+      <line x1="12" y1="9" x2="12" y2="13" />
+      <line x1="12" y1="17" x2="12.01" y2="17" />
+    </svg>
+  ),
+  'check-circle': (color: string) => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+      <polyline points="22 4 12 14.01 9 11.01" />
+    </svg>
+  ),
+  'x-circle': (color: string) => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" />
+      <line x1="15" y1="9" x2="9" y2="15" />
+      <line x1="9" y1="9" x2="15" y2="15" />
+    </svg>
+  ),
+  'star': (color: string) => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+    </svg>
+  ),
+  'flame': (color: string) => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M8.5 14.5A2.5 2.5 0 0 1 11 12c0-1.38.5-2.5 1.5-3.5S14 7.5 14 5a4 4 0 0 1 4 4c0 3.5-4 6-6 10-2.5-3.5-3.5-5.5-3.5-9.5a4.5 4.5 0 0 1 4.5-4.5c1.38 0 2.6.7 3.5 1.8C16.4 5.3 17 6.6 17 8c0 1.5-.5 3-1.5 4.5S14 15 14 17a3 3 0 0 1-3 3 4 4 0 0 1-2.5-5.5z" />
+    </svg>
+  ),
+  'rocket': (color: string) => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z" />
+      <path d="M12 15l-3-3a22 22 0 0 1 2-7c2.43 0 4.88.43 7 2.17a22 22 0 0 1 2.17 7c-1.57 2.12-2.17 4.57-2.17 7a22 22 0 0 1-7-2z" />
+      <path d="M9 12c-1.5 1.5-2 4-2 4s2.5-.5 4-2" />
+      <line x1="12" y1="8" x2="12.01" y2="8" />
+    </svg>
+  ),
+  'target': (color: string) => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" />
+      <circle cx="12" cy="12" r="6" />
+      <circle cx="12" cy="12" r="2" />
+    </svg>
+  ),
+  'bar-chart-3': (color: string) => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="18" y1="20" x2="18" y2="10" />
+      <line x1="12" y1="20" x2="12" y2="4" />
+      <line x1="6" y1="20" x2="6" y2="14" />
+    </svg>
+  ),
+  'trending-up': (color: string) => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
+      <polyline points="17 6 23 6 23 12" />
+    </svg>
+  ),
+  'trending-down': (color: string) => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="23 18 13.5 8.5 8.5 13.5 1 6" />
+      <polyline points="17 18 23 18 23 12" />
+    </svg>
+  ),
+  'book': (color: string) => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+    </svg>
+  ),
+  'book-open': (color: string) => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
+      <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+    </svg>
+  ),
+  'notebook': (color: string) => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 4h16v16H4z" />
+      <path d="M4 4h6v16H4z" />
+    </svg>
+  ),
+  'notebook-text': (color: string) => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 4h16v16H4z" />
+      <path d="M4 4h6v16H4z" />
+      <line x1="14" y1="8" x2="20" y2="8" />
+      <line x1="14" y1="12" x2="20" y2="12" />
+      <line x1="14" y1="16" x2="18" y2="16" />
+    </svg>
+  )
+};
+
+// Available list icon keys
+const LIST_ICONS = Object.keys(listIcons) as Array<keyof typeof listIcons>;
+
 const PRIORITIES = ['Urgent', 'High', 'Normal', 'Low', 'Clear'];
 
 const getStatusStyles = (status: string) => {
@@ -534,7 +707,7 @@ export default function SpacesPage() {
 
   const [modalConfig, setModalConfig] = useState<{
     isOpen: boolean;
-    type: 'Space' | 'Folder' | 'List' | 'Task' | 'Rename' | 'Delete' | 'Move' | 'Color' | 'Archive';
+    type: 'Space' | 'Folder' | 'List' | 'Task' | 'Rename' | 'Delete' | 'Move' | 'Color' | 'Archive' | 'Icon';
     targetId?: string;
     targetType?: 'space' | 'folder' | 'list' | 'statusGroup' | 'task';
     inputValue: string;
@@ -563,7 +736,7 @@ export default function SpacesPage() {
     priority: 'Normal',
   });
 
-  const openModal = (type: 'Space' | 'Folder' | 'List' | 'Task' | 'Rename' | 'Delete' | 'Move' | 'Color' | 'Archive', targetId?: string, targetType?: 'space' | 'folder' | 'list' | 'statusGroup' | 'task', initialValue: string = '', initialData: any = {}) => {
+  const openModal = (type: 'Space' | 'Folder' | 'List' | 'Task' | 'Rename' | 'Delete' | 'Move' | 'Color' | 'Archive' | 'Icon', targetId?: string, targetType?: 'space' | 'folder' | 'list' | 'statusGroup' | 'task', initialValue: string = '', initialData: any = {}) => {
     setModalConfig({
       isOpen: true,
       type,
@@ -1288,11 +1461,46 @@ export default function SpacesPage() {
         const updated = await res.json();
         if (type === 'space') setSpaces(spaces.map(s => s.id === id ? updated : s));
         else if (type === 'folder') setFolders(folders.map(f => f.id === id ? { ...updated, spaceId: updated.space_id } : f));
-        else if (type === 'list') setLists(lists.map(l => l.id === id ? { ...updated, parentId: updated.parent_id } : l));
+        else if (type === 'list') {
+          setLists(lists.map(l => {
+            if (l.id === id) {
+              return {
+                ...l,
+                ...updated,
+                parentId: updated.parent_id,
+                icon: l.icon // Preserve existing icon
+              };
+            }
+            return l;
+          }));
+        }
         fetchLogs();
       }
       closeModal();
     } catch (e) { console.error(e); }
+  };
+
+  const updateItemIcon = async (id: string, icon: keyof typeof listIcons) => {
+    try {
+      // Update local state first for immediate feedback
+      setLists(lists.map(l => l.id === id ? { ...l, icon } : l));
+      
+      const res = await fetch('/api/admin/spaces', {
+        method: 'PATCH',
+        body: JSON.stringify({ type: 'list', id, icon })
+      });
+      
+      if (res.ok) {
+        const updated = await res.json();
+        setLists(lists.map(l => l.id === id ? { ...updated, parentId: updated.parent_id, icon } : l));
+        fetchLogs();
+      }
+      closeModal();
+    } catch (e) { 
+      console.error(e); 
+      // Revert on error
+      fetchData();
+    }
   };
 
   // Drag and drop state
@@ -1671,7 +1879,9 @@ export default function SpacesPage() {
                                   setDraggedTask(null);
                                 }}
                               >
-                                <div className={styles.treeIcon} style={{ marginLeft: '24px' }}><IconList color={list.color} /></div>
+                                <div className={styles.treeIcon} style={{ marginLeft: '24px' }}>
+                                  {list.icon ? listIcons[list.icon](list.color || '#94a3b8') : <IconList color={list.color} />}
+                                </div>
                                 <div>{list.name}</div>
                               </div>
                             ))}
@@ -1706,7 +1916,9 @@ export default function SpacesPage() {
                           setDraggedTask(null);
                         }}
                       >
-                        <div className={styles.treeIcon} style={{ marginLeft: '24px' }}><IconList color={list.color} /></div>
+                        <div className={styles.treeIcon} style={{ marginLeft: '24px' }}>
+                          {list.icon ? listIcons[list.icon](list.color || '#94a3b8') : <IconList color={list.color} />}
+                        </div>
                         <div>{list.name}</div>
                       </div>
                     ))}
@@ -4252,8 +4464,9 @@ export default function SpacesPage() {
                         ) :
                           modalConfig.type === 'Move' ? `Move ${modalConfig.targetType}` :
                             modalConfig.type === 'Color' ? `Choose ${modalConfig.targetType} Color` :
-                              modalConfig.type === 'Task' ? 'Create New Task' :
-                                `Create a ${modalConfig.type}`}
+                              modalConfig.type === 'Icon' ? 'Choose List Icon' :
+                                modalConfig.type === 'Task' ? 'Create New Task' :
+                                  `Create a ${modalConfig.type}`}
                   </div>
                 </div>
                 <button type="button" className={styles.closeBtn} onClick={closeModal}>×</button>
@@ -4296,6 +4509,46 @@ export default function SpacesPage() {
                           style={{ background: c }}
                           onClick={() => updateItemColor(modalConfig.targetId!, modalConfig.targetType as 'space' | 'folder' | 'list', c)}
                         />
+                      );
+                    })}
+                  </div>
+                ) : modalConfig.type === 'Icon' ? (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '12px' }}>
+                    {LIST_ICONS.map(iconKey => {
+                      const currentList = lists.find(l => l.id === modalConfig.targetId);
+                      const isSelected = currentList?.icon === iconKey;
+                      const color = currentList?.color || '#94a3b8';
+                      return (
+                        <div
+                          key={iconKey}
+                          style={{
+                            width: '50px',
+                            height: '50px',
+                            borderRadius: '12px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: 'pointer',
+                            border: isSelected ? '3px solid #2563eb' : '2px solid #e2e8f0',
+                            background: isSelected ? '#eff6ff' : 'white',
+                            transition: 'all 0.2s'
+                          }}
+                          onClick={() => updateItemIcon(modalConfig.targetId!, iconKey)}
+                          onMouseEnter={(e) => {
+                            if (!isSelected) {
+                              e.currentTarget.style.borderColor = '#94a3b8';
+                              e.currentTarget.style.background = '#f8fafc';
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!isSelected) {
+                              e.currentTarget.style.borderColor = '#e2e8f0';
+                              e.currentTarget.style.background = 'white';
+                            }
+                          }}
+                        >
+                          {listIcons[iconKey](color)}
+                        </div>
                       );
                     })}
                   </div>
@@ -4912,6 +5165,12 @@ export default function SpacesPage() {
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m19 21-7-7" /><circle cx="7.5" cy="7.5" r="5.5" /><path d="m21 3-4.5 4.5" /></svg>
                 Change Color
               </div>
+              {contextMenu.type === 'list' && (
+                <div className={styles.contextMenuItem} onClick={() => { openModal('Icon', contextMenu.id, contextMenu.type); closeContextMenu(); }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" /></svg>
+                  Change Icon
+                </div>
+              )}
               <div className={styles.contextMenuItem} onClick={() => { openModal('Move', contextMenu.id, contextMenu.type); closeContextMenu(); }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m9 18 6-6-6-6" /></svg>
                 Move to
