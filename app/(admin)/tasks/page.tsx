@@ -281,8 +281,7 @@ function TasksContent() {
   const dragTaskId = useRef<number | null>(null);
 
   async function resolveDriveFolderImages(folderUrl: string): Promise<string[]> {
-    const res = await fetch(`/api/admin/drive/folder-images?url=${encodeURIComponent(folderUrl)}`, {
-      credentials: 'include',
+    const res = await fetch(`/api/drive/folder-images?url=${encodeURIComponent(folderUrl)}`, {
       cache: 'no-store',
     });
     const data = await res.json().catch(() => ({}));
@@ -320,6 +319,75 @@ function TasksContent() {
   useEffect(() => {
     loadData();
   }, []);
+
+  // Periodic polling: sync Google Drive folder tasks every 30 seconds
+  const syncingRef = useRef(false);
+
+  const syncDriveFolders = useRef(async (currentTasks: Task[]) => {
+    if (syncingRef.current) return;
+    const driveFolderTasks = currentTasks.filter(t => isGoogleDriveFolderUrl(t.image_url));
+    if (driveFolderTasks.length === 0) return;
+
+    syncingRef.current = true;
+    try {
+      for (const task of driveFolderTasks) {
+        try {
+          const freshImages = await resolveDriveFolderImages(task.image_url);
+          if (freshImages.length > 0) {
+            const currentImages = Array.isArray(task.image_urls) ? task.image_urls : [];
+            const changed =
+              freshImages.length !== currentImages.length ||
+              freshImages.some((url: string, idx: number) => url !== currentImages[idx]);
+
+            if (changed) {
+              setTasks(prev =>
+                prev.map(t =>
+                  t.id === task.id ? { ...t, image_urls: freshImages } : t
+                )
+              );
+              setSelectedTask(prev =>
+                prev?.id === task.id ? { ...prev, image_urls: freshImages } : prev
+              );
+
+              // Persist to database
+              await fetch(`/api/admin/tasks/${task.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({
+                  client_id: task.client_id,
+                  title: task.title,
+                  image_url: task.image_url,
+                  image_urls: freshImages,
+                  caption: task.caption,
+                  status: task.status,
+                }),
+              });
+            }
+          }
+        } catch (err) {
+          console.error(`Drive sync failed for task ${task.id}:`, err);
+        }
+      }
+    } finally {
+      syncingRef.current = false;
+    }
+  });
+
+  // Run sync on initial load and then every 30 seconds
+  const tasksRef = useRef(tasks);
+  tasksRef.current = tasks;
+
+  useEffect(() => {
+    if (tasks.length === 0) return;
+    // Initial sync
+    syncDriveFolders.current(tasks);
+    // Periodic polling
+    const interval = setInterval(() => {
+      syncDriveFolders.current(tasksRef.current);
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [tasks.length > 0]); // Only re-setup when tasks go from empty to loaded
 
   async function loadData() {
     try {
@@ -413,7 +481,7 @@ function TasksContent() {
           return;
         }
         resolvedImageUrls = folderImages;
-        resolvedImageUrl = folderImages[0];
+        resolvedImageUrl = rawUrl; // Store the original folder link
       } else if (Array.isArray(form.image_urls) && form.image_urls.length > 0) {
         resolvedImageUrls = form.image_urls.filter(Boolean);
       }

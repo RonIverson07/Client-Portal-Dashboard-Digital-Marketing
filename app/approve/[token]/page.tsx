@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import styles from './approve.module.css';
-import { getDisplayImageUrl } from '@/lib/imageUtils';
+import { getDisplayImageUrl, isGoogleDriveFolderUrl } from '@/lib/imageUtils';
 import { getTaskImages } from '@/lib/taskImages';
 import { TaskImageCarousel } from '@/components/TaskImageCarousel';
 
@@ -630,6 +630,63 @@ export default function ApprovalPage() {
 
   // Fetch on mount
   useEffect(() => { loadData(); }, [loadData]);
+
+  // Periodic polling: sync Google Drive folder tasks every 30 seconds
+  const syncingRef = useRef(false);
+
+  const syncDriveFolders = useRef(async (currentTasks: Task[]) => {
+    if (syncingRef.current) return;
+    const driveFolderTasks = currentTasks.filter(t => isGoogleDriveFolderUrl(t.image_url));
+    if (driveFolderTasks.length === 0) return;
+
+    syncingRef.current = true;
+    try {
+      for (const task of driveFolderTasks) {
+        try {
+          const res = await fetch(`/api/drive/folder-images?url=${encodeURIComponent(task.image_url)}`, {
+            cache: 'no-store',
+          });
+          const data = await res.json().catch(() => ({}));
+          if (res.ok && Array.isArray(data.imageUrls) && data.imageUrls.length > 0) {
+            const freshImages = data.imageUrls;
+            const currentImages = Array.isArray(task.image_urls) ? task.image_urls : [];
+            const changed =
+              freshImages.length !== currentImages.length ||
+              freshImages.some((url: string, idx: number) => url !== currentImages[idx]);
+
+            if (changed) {
+              setTasks(prev =>
+                prev.map(t =>
+                  t.id === task.id ? { ...t, image_urls: freshImages } : t
+                )
+              );
+              setDetailTask(prev =>
+                prev?.id === task.id ? { ...prev, image_urls: freshImages } : prev
+              );
+            }
+          }
+        } catch (err) {
+          console.error(`Drive sync failed for task ${task.id}:`, err);
+        }
+      }
+    } finally {
+      syncingRef.current = false;
+    }
+  });
+
+  const clientTasksRef = useRef(tasks);
+  clientTasksRef.current = tasks;
+
+  useEffect(() => {
+    if (tasks.length === 0) return;
+    // Initial sync
+    syncDriveFolders.current(tasks);
+    // Periodic polling
+    const interval = setInterval(() => {
+      syncDriveFolders.current(clientTasksRef.current);
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [tasks.length > 0]);
 
   // Re-fetch when user navigates back to the tab or switches focus
   useEffect(() => {

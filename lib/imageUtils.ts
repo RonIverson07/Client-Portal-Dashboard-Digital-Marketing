@@ -38,7 +38,7 @@ export function extractGoogleDriveFolderId(url: string): string | null {
  */
 export function getDisplayImageUrl(url: string): string {
   if (!url || typeof url !== 'string') return '';
-  const trimmed = url.trim();
+  const trimmed = url.trim().split('#')[0];
   if (!trimmed) return '';
 
   const fileId = extractGoogleDriveFileId(trimmed);

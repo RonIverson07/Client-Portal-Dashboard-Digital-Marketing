@@ -304,7 +304,7 @@ export default function SpacesPage() {
   const [calendarSelectedDay, setCalendarSelectedDay] = useState<number>(new Date().getDate());
   const [manualTime, setManualTime] = useState<string>('08:00');
   const dashboardRef = useRef<HTMLDivElement>(null);
-  
+
   const getFullPath = () => {
     if (!activeItem) return 'Overview';
     const path: string[] = [];
@@ -336,7 +336,7 @@ export default function SpacesPage() {
     }
     return path.filter(Boolean).join('/');
   };
-  
+
   // Reset calendar when opening context menu
   useEffect(() => {
     if (contextMenu) {
@@ -766,8 +766,8 @@ export default function SpacesPage() {
         const url = String(initialData.coverImageUrl ?? initialData.cover_image_url ?? '').trim();
         const gallery = Array.isArray(initialData.imageUrls ?? initialData.image_urls)
           ? (initialData.imageUrls ?? initialData.image_urls).filter(
-              (x: unknown) => typeof x === 'string' && !!String(x).trim()
-            )
+            (x: unknown) => typeof x === 'string' && !!String(x).trim()
+          )
           : [];
         if (!url && gallery.length === 0) return 'none' as TaskCoverMode;
         if (gallery.length > 0 || isGoogleDriveUrl(url)) return 'drive';
@@ -1484,20 +1484,20 @@ export default function SpacesPage() {
     try {
       // Update local state first for immediate feedback
       setLists(lists.map(l => l.id === id ? { ...l, icon } : l));
-      
+
       const res = await fetch('/api/admin/spaces', {
         method: 'PATCH',
         body: JSON.stringify({ type: 'list', id, icon })
       });
-      
+
       if (res.ok) {
         const updated = await res.json();
         setLists(lists.map(l => l.id === id ? { ...updated, parentId: updated.parent_id, icon } : l));
         fetchLogs();
       }
       closeModal();
-    } catch (e) { 
-      console.error(e); 
+    } catch (e) {
+      console.error(e);
       // Revert on error
       fetchData();
     }
@@ -1666,7 +1666,7 @@ export default function SpacesPage() {
 
     // CSV Headers
     const headers = ['Title', 'Description', 'Assignee', 'Status', 'Due Date', 'Priority', 'Start Date'];
-    
+
     // CSV Rows
     const rows = tasksToExport.map(task => [
       task.title,
@@ -1677,13 +1677,13 @@ export default function SpacesPage() {
       task.priority || 'Normal',
       formatDateForCSV(task.startDate)
     ]);
-    
+
     // Combine headers and rows
     const csvContent = [
       headers.join(','),
       ...rows.map(row => row.map(field => `"${String(field).replace(/"/g, '""')}"`).join(','))
     ].join('\n');
-    
+
     // Create download link
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -1830,7 +1830,7 @@ export default function SpacesPage() {
                               const folderLists = lists.filter(l => l.parentId === folder.id);
                               if (folderLists.length === 1) {
                                 const targetList = folderLists[0];
-                                setTasks(prev => prev.map(t => 
+                                setTasks(prev => prev.map(t =>
                                   t.id === draggedTask.id ? { ...t, listId: targetList.id } : t
                                 ));
                                 fetch('/api/admin/project-tasks', {
@@ -1867,7 +1867,7 @@ export default function SpacesPage() {
                                 onDrop={(e) => {
                                   e.preventDefault();
                                   if (draggedTask) {
-                                    setTasks(prev => prev.map(t => 
+                                    setTasks(prev => prev.map(t =>
                                       t.id === draggedTask.id ? { ...t, listId: list.id } : t
                                     ));
                                     fetch('/api/admin/project-tasks', {
@@ -1904,7 +1904,7 @@ export default function SpacesPage() {
                         onDrop={(e) => {
                           e.preventDefault();
                           if (draggedTask) {
-                            setTasks(prev => prev.map(t => 
+                            setTasks(prev => prev.map(t =>
                               t.id === draggedTask.id ? { ...t, listId: list.id } : t
                             ));
                             fetch('/api/admin/project-tasks', {
@@ -2455,7 +2455,7 @@ export default function SpacesPage() {
                       onClick={() => {
                         const filteredTasks = currentTasks
                           .filter(t => listStatusFilter === 'All' || t.status === listStatusFilter)
-                          .filter(t => 
+                          .filter(t =>
                             t.title.toLowerCase().includes(listSearchQuery.toLowerCase()) ||
                             (t.description && t.description.toLowerCase().includes(listSearchQuery.toLowerCase())) ||
                             (t.assignee && t.assignee.toLowerCase().includes(listSearchQuery.toLowerCase()))
@@ -2480,7 +2480,7 @@ export default function SpacesPage() {
                 <div className={styles.listViewContainer}>
 
                   {statuses.filter(s => listStatusFilter === 'All' || s === listStatusFilter).map(status => {
-                    const colTasks = currentTasks.filter(t => t.status === status).filter(t => 
+                    const colTasks = currentTasks.filter(t => t.status === status).filter(t =>
                       t.title.toLowerCase().includes(listSearchQuery.toLowerCase()) ||
                       (t.description && t.description.toLowerCase().includes(listSearchQuery.toLowerCase())) ||
                       (t.assignee && t.assignee.toLowerCase().includes(listSearchQuery.toLowerCase()))
@@ -2488,8 +2488,8 @@ export default function SpacesPage() {
                     const { color: statusColor, bg: statusBg } = getStatusStyles(status);
 
                     return (
-                      <div 
-                        key={status} 
+                      <div
+                        key={status}
                         className={styles.statusGroup}
                         onDragOver={(e) => {
                           e.preventDefault();
@@ -2498,7 +2498,7 @@ export default function SpacesPage() {
                         onDrop={(e) => {
                           e.preventDefault();
                           if (draggedTask && draggedTask.status !== status) {
-                            setTasks(prev => prev.map(t => 
+                            setTasks(prev => prev.map(t =>
                               t.id === draggedTask.id ? { ...t, status } : t
                             ));
                             fetch('/api/admin/project-tasks', {
@@ -2524,8 +2524,8 @@ export default function SpacesPage() {
                         </div>
 
                         {colTasks.map(task => (
-                          <div 
-                            key={task.id} 
+                          <div
+                            key={task.id}
                             className={styles.listRow}
                             draggable
                             onDragStart={(e) => {
@@ -2533,9 +2533,9 @@ export default function SpacesPage() {
                               e.dataTransfer.effectAllowed = 'move';
                             }}
                             onDragEnd={() => setDraggedTask(null)}
-                            style={{ 
-                              opacity: draggedTask?.id === task.id ? 0.5 : 1, 
-                              cursor: 'grab' 
+                            style={{
+                              opacity: draggedTask?.id === task.id ? 0.5 : 1,
+                              cursor: 'grab'
                             }}
                           >
                             <div className={styles.taskNameCell} onClick={(e) => { e.stopPropagation(); openModal('Rename', task.id, 'task', task.title, task); }}>
@@ -3213,15 +3213,15 @@ export default function SpacesPage() {
                             ))}
                             {(startDate || dueDate) && offset + (width / getColumnWidth) > 0 && offset < colCount && (
                               <div
-                                  className={styles.ganttBar}
-                                  style={{
-                                    left: `${offset * getColumnWidth}px`,
-                                    width: `${width}px`,
-                                    background: getStatusStyles(task.status).color
-                                  }}
-                                  title={`${task.title}${startDate ? ' | Start: ' + task.startDate : ''}${dueDate ? ' | Due: ' + task.dueDate : ''}`}
-                                >
-                                </div>
+                                className={styles.ganttBar}
+                                style={{
+                                  left: `${offset * getColumnWidth}px`,
+                                  width: `${width}px`,
+                                  background: getStatusStyles(task.status).color
+                                }}
+                                title={`${task.title}${startDate ? ' | Start: ' + task.startDate : ''}${dueDate ? ' | Due: ' + task.dueDate : ''}`}
+                              >
+                              </div>
                             )}
                           </div>
                         );
@@ -3509,7 +3509,7 @@ export default function SpacesPage() {
                       if (a === 'Unassigned') return -1;
                       if (b === 'Unassigned') return 1;
                       return a.localeCompare(b);
-                    }).filter(member => 
+                    }).filter(member =>
                       member.toLowerCase().includes(teamSearchQuery.toLowerCase())
                     );
 
@@ -3568,75 +3568,75 @@ export default function SpacesPage() {
 
                           {(expandedTeamMembers[member] ?? true) && (
                             <div className={styles.memberBody}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-                              <div style={{ display: 'flex', gap: '24px' }}>
-                                <div>
-                                  <div style={{ fontSize: '24px', fontWeight: 700, color: '#0f172a' }}>{notDone}</div>
-                                  <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Not done</div>
-                                </div>
-                                <div>
-                                  <div style={{ fontSize: '24px', fontWeight: 700, color: '#0f172a' }}>{done}</div>
-                                  <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Done</div>
-                                </div>
-                              </div>
-                              <div style={{ position: 'relative', width: '56px', height: '56px' }}>
-                                <svg width="56" height="56" viewBox="0 0 36 36">
-                                  <circle cx="18" cy="18" r="16" fill="none" stroke="#f1f5f9" strokeWidth="3" />
-                                  <circle cx="18" cy="18" r="16" fill="none" stroke={progress === 100 ? '#10b981' : '#2563eb'} strokeWidth="3" strokeDasharray={`${progress} 100`} transform="rotate(-90 18 18)" strokeLinecap="round" />
-                                </svg>
-                                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 700, color: '#0f172a' }}>
-                                  {Math.round(progress)}%
-                                </div>
-                              </div>
-                            </div>
-
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                              {statuses.filter(s => s !== 'COMPLETE').map(status => {
-                                const statusTasks = memberTasks.filter(t => t.status === status);
-                                if (statusTasks.length === 0) return null;
-                                const expandedKey = `${member}-${status}`;
-                                const isExpanded = expandedTeamStatuses[expandedKey] ?? true;
-
-                                return (
-                                  <div key={status} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                    <div
-                                      className={styles.memberStatusRow}
-                                      style={{ cursor: 'pointer' }}
-                                      onClick={() => setExpandedTeamStatuses(prev => ({ ...prev, [expandedKey]: !(prev[expandedKey] ?? true) }))}
-                                    >
-                                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: '#94a3b8', transform: isExpanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' }}>
-                                          <path d="m9 18 6-6-6-6" />
-                                        </svg>
-                                        <div style={{ width: '8px', height: '8px', borderRadius: '2px', background: getStatusStyles(status).color }}></div>
-                                        <span style={{ fontSize: '12px', fontWeight: 600, color: '#475569' }}>{status}</span>
-                                        <span style={{ fontSize: '12px', color: '#94a3b8' }}>({statusTasks.length})</span>
-                                      </div>
-                                    </div>
-
-                                    {isExpanded && (
-                                      <div style={{ paddingLeft: '26px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                        {statusTasks.map(task => (
-                                          <div
-                                            key={task.id}
-                                            className={styles.teamTaskItem}
-                                            onClick={(e) => { e.stopPropagation(); openModal('Rename', task.id, 'task', task.title, task); }}
-                                          >
-                                            <div
-                                              className={styles.teamTaskIcon}
-                                              style={{ color: getStatusStyles(status).color }}
-                                            />
-                                            <span className={styles.teamTaskTitle}>{task.title}</span>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    )}
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                                <div style={{ display: 'flex', gap: '24px' }}>
+                                  <div>
+                                    <div style={{ fontSize: '24px', fontWeight: 700, color: '#0f172a' }}>{notDone}</div>
+                                    <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Not done</div>
                                   </div>
-                                );
-                              })}
+                                  <div>
+                                    <div style={{ fontSize: '24px', fontWeight: 700, color: '#0f172a' }}>{done}</div>
+                                    <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>Done</div>
+                                  </div>
+                                </div>
+                                <div style={{ position: 'relative', width: '56px', height: '56px' }}>
+                                  <svg width="56" height="56" viewBox="0 0 36 36">
+                                    <circle cx="18" cy="18" r="16" fill="none" stroke="#f1f5f9" strokeWidth="3" />
+                                    <circle cx="18" cy="18" r="16" fill="none" stroke={progress === 100 ? '#10b981' : '#2563eb'} strokeWidth="3" strokeDasharray={`${progress} 100`} transform="rotate(-90 18 18)" strokeLinecap="round" />
+                                  </svg>
+                                  <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 700, color: '#0f172a' }}>
+                                    {Math.round(progress)}%
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                {statuses.filter(s => s !== 'COMPLETE').map(status => {
+                                  const statusTasks = memberTasks.filter(t => t.status === status);
+                                  if (statusTasks.length === 0) return null;
+                                  const expandedKey = `${member}-${status}`;
+                                  const isExpanded = expandedTeamStatuses[expandedKey] ?? true;
+
+                                  return (
+                                    <div key={status} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                      <div
+                                        className={styles.memberStatusRow}
+                                        style={{ cursor: 'pointer' }}
+                                        onClick={() => setExpandedTeamStatuses(prev => ({ ...prev, [expandedKey]: !(prev[expandedKey] ?? true) }))}
+                                      >
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: '#94a3b8', transform: isExpanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' }}>
+                                            <path d="m9 18 6-6-6-6" />
+                                          </svg>
+                                          <div style={{ width: '8px', height: '8px', borderRadius: '2px', background: getStatusStyles(status).color }}></div>
+                                          <span style={{ fontSize: '12px', fontWeight: 600, color: '#475569' }}>{status}</span>
+                                          <span style={{ fontSize: '12px', color: '#94a3b8' }}>({statusTasks.length})</span>
+                                        </div>
+                                      </div>
+
+                                      {isExpanded && (
+                                        <div style={{ paddingLeft: '26px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                          {statusTasks.map(task => (
+                                            <div
+                                              key={task.id}
+                                              className={styles.teamTaskItem}
+                                              onClick={(e) => { e.stopPropagation(); openModal('Rename', task.id, 'task', task.title, task); }}
+                                            >
+                                              <div
+                                                className={styles.teamTaskIcon}
+                                                style={{ color: getStatusStyles(status).color }}
+                                              />
+                                              <span className={styles.teamTaskTitle}>{task.title}</span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
                             </div>
-                          </div>
-                        )}
+                          )}
                         </div>
                       );
                     });
@@ -3822,330 +3822,330 @@ export default function SpacesPage() {
 
                 <div style={{ display: 'flex', gap: '16px' }}>
                   <div className={styles.workloadGrid} style={{ flex: backlogOpen ? 3 : 1 }}>
-                  <div className={styles.workloadGridHeader}>
-                    <div className={styles.workloadAssigneeCol}>Assignee</div>
-                    {[...Array(workloadRange)].map((_, i) => {
-                      const d = new Date();
-                      d.setDate(d.getDate() + i);
-                      const isToday = i === 0;
-                      return (
-                        <div key={i} className={styles.workloadDateCol}>
-                          <div style={{ fontSize: '10px', color: isToday ? '#2563eb' : '#94a3b8', fontWeight: isToday ? 700 : 500 }}>
-                            {['S', 'M', 'T', 'W', 'T', 'F', 'S'][d.getDay()]}
-                          </div>
-                          <div style={{ fontSize: '13px', fontWeight: isToday ? 700 : 600, color: isToday ? '#2563eb' : '#0f172a', background: isToday ? '#eff6ff' : 'transparent', width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%' }}>
-                            {d.getDate()}
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-
-                  {/* Assignee Rows */}
-                  {(() => {
-                    const rangeStart = new Date();
-                    rangeStart.setHours(0, 0, 0, 0);
-
-                    const assignees = Array.from(new Set(currentTasks.map(t => formatAssignee(t.assignee))));
-                    if (assignees.length === 0) assignees.push('You', 'Unassigned');
-
-                    return assignees.filter(assignee => 
-                      assignee.toLowerCase().includes(workloadSearchQuery.toLowerCase())
-                    ).map(assignee => {
-                      const assigneeTasks = currentTasks.filter(
-                        t => formatAssignee(t.assignee) === assignee && t.status !== 'COMPLETE'
-                      );
-                      const taskDistributions = assigneeTasks.map(t => ({
-                        task: t,
-                        dist: distributeTaskHours(t),
-                      }));
-                      const workloadTasks = taskDistributions.filter(td => Object.keys(td.dist).length > 0);
-                      const totalHours = workloadTasks.reduce(
-                        (sum, td) => sum + sumHoursInRange(td.dist, rangeStart, workloadRange),
-                        0
-                      );
-
-                      return (
-                        <div key={assignee} className={styles.workloadRow}>
-                          <div className={styles.workloadAssigneeCol}>
-                            <div className={styles.workloadAvatar}>{assignee[0]}</div>
-                            <span style={{ fontWeight: 600, color: '#1e293b', fontSize: '13px', flex: 1 }}>{assignee}</span>
-                            <div style={{ fontSize: '10px', color: '#64748b', background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>
-                              {formatWorkloadHours(totalHours)}/40h
+                    <div className={styles.workloadGridHeader}>
+                      <div className={styles.workloadAssigneeCol}>Assignee</div>
+                      {[...Array(workloadRange)].map((_, i) => {
+                        const d = new Date();
+                        d.setDate(d.getDate() + i);
+                        const isToday = i === 0;
+                        return (
+                          <div key={i} className={styles.workloadDateCol}>
+                            <div style={{ fontSize: '10px', color: isToday ? '#2563eb' : '#94a3b8', fontWeight: isToday ? 700 : 500 }}>
+                              {['S', 'M', 'T', 'W', 'T', 'F', 'S'][d.getDay()]}
+                            </div>
+                            <div style={{ fontSize: '13px', fontWeight: isToday ? 700 : 600, color: isToday ? '#2563eb' : '#0f172a', background: isToday ? '#eff6ff' : 'transparent', width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%' }}>
+                              {d.getDate()}
                             </div>
                           </div>
-                          {[...Array(workloadRange)].map((_, i) => {
-                            const d = new Date(rangeStart);
-                            d.setDate(d.getDate() + i);
-                            const dateString = toDateKey(d);
-
-                            const tasksOnDate = workloadTasks.filter(
-                              td => (td.dist[dateString] ?? 0) > 0
-                            );
-                            const hoursOnDate = Math.round(
-                              tasksOnDate.reduce((sum, td) => sum + (td.dist[dateString] ?? 0), 0) * 10
-                            ) / 10;
-                            const hasTask = hoursOnDate > 0;
-
-                            return (
-                              <div key={i} className={styles.workloadCell} style={{ position: 'relative' }}>
-                                <div 
-                                  className={`${styles.workloadCellBox} ${hasTask ? styles.workloadCellBoxActive : ''}`}
-                                  onMouseEnter={() => setHoveredWorkloadCell({ assignee, date: dateString })}
-                                  onMouseLeave={() => setHoveredWorkloadCell(null)}
-                                >
-                                  {formatWorkloadHours(hoursOnDate)}
-                                  {hasTask && <div className={styles.workloadTaskCount}>{tasksOnDate.length}</div>}
-                                </div>
-                                {hoveredWorkloadCell?.assignee === assignee && hoveredWorkloadCell?.date === dateString && (
-                                  <div style={{
-                                    position: 'absolute',
-                                    bottom: '100%',
-                                    left: '50%',
-                                    transform: 'translateX(-50%)',
-                                    marginBottom: '8px',
-                                    background: '#0f172a',
-                                    color: 'white',
-                                    padding: '8px 12px',
-                                    borderRadius: '6px',
-                                    fontSize: '12px',
-                                    whiteSpace: 'nowrap',
-                                    zIndex: 100,
-                                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
-                                  }}>
-                                    {hasTask ? (
-                                      tasksOnDate.map((td, idx) => (
-                                        <div key={idx}>{td.task.title}</div>
-                                      ))
-                                    ) : (
-                                      <div>Nothing scheduled</div>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            )
-                          })}
-                        </div>
-                      )
-                    });
-                  })()}
-                </div>
-
-                {backlogOpen && (
-                  <div style={{
-                    width: '420px',
-                    background: 'white',
-                    border: '1px solid #e2e8f0',
-                    borderRadius: '12px',
-                    overflow: 'hidden',
-                    display: 'flex',
-                    flexDirection: 'column'
-                  }}>
-                    <div style={{
-                      padding: '16px',
-                      borderBottom: '1px solid #e2e8f0',
-                      background: '#f8fafc'
-                    }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                        <div style={{ fontSize: '15px', fontWeight: 700, color: '#0f172a' }}>Tasks</div>
-                      </div>
-                      <div style={{ display: 'flex', gap: '12px', fontSize: '13px', color: '#64748b', flexWrap: 'wrap' }}>
-                        {['Unscheduled', 'No estimate', 'Overdue', 'Unassigned'].map(tab => (
-                          <div
-                            key={tab}
-                            onClick={() => setActiveBacklogTab(tab)}
-                            style={{
-                              fontWeight: activeBacklogTab === tab ? 600 : 500,
-                              color: activeBacklogTab === tab ? '#0f172a' : '#64748b',
-                              borderBottom: activeBacklogTab === tab ? '2px solid #0f172a' : '2px solid transparent',
-                              paddingBottom: '8px',
-                              cursor: 'pointer',
-                              whiteSpace: 'nowrap',
-                              flexShrink: 0
-                            }}
-                          >
-                            {tab}
-                          </div>
-                        ))}
-                      </div>
-                      <div style={{ marginTop: '12px', position: 'relative' }}>
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }}>
-                          <circle cx="11" cy="11" r="8" />
-                          <path d="m21 21-4.35-4.35" />
-                        </svg>
-                        <input
-                          type="text"
-                          placeholder="Search tasks..."
-                          value={backlogSearchQuery}
-                          onChange={e => setBacklogSearchQuery(e.target.value)}
-                          style={{
-                            width: '100%',
-                            padding: '8px 12px',
-                            paddingLeft: '36px',
-                            border: '1px solid #e2e8f0',
-                            borderRadius: '6px',
-                            fontSize: '13px',
-                            outline: 'none'
-                          }}
-                        />
-                      </div>
+                        )
+                      })}
                     </div>
 
-                    <div style={{ padding: '12px 16px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <select
-                          value={backlogSortBy}
-                          onChange={e => setBacklogSortBy(e.target.value)}
-                          style={{
-                            padding: '8px 14px',
-                            borderRadius: '8px',
-                            border: '1px solid #e2e8f0',
-                            fontSize: '13px',
-                            fontWeight: 500,
-                            color: '#0f172a',
-                            outline: 'none',
-                            background: '#f8fafc',
-                            cursor: 'pointer',
-                            transition: 'all 0.15s ease'
-                          }}
-                        >
-                          <option value="All Priority">All Priority</option>
-                          <option value="Urgent">Urgent</option>
-                          <option value="High">High</option>
-                          <option value="Normal">Normal</option>
-                          <option value="Low">Low</option>
-                          <option value="Clear">Clear</option>
-                        </select>
+                    {/* Assignee Rows */}
+                    {(() => {
+                      const rangeStart = new Date();
+                      rangeStart.setHours(0, 0, 0, 0);
+
+                      const assignees = Array.from(new Set(currentTasks.map(t => formatAssignee(t.assignee))));
+                      if (assignees.length === 0) assignees.push('You', 'Unassigned');
+
+                      return assignees.filter(assignee =>
+                        assignee.toLowerCase().includes(workloadSearchQuery.toLowerCase())
+                      ).map(assignee => {
+                        const assigneeTasks = currentTasks.filter(
+                          t => formatAssignee(t.assignee) === assignee && t.status !== 'COMPLETE'
+                        );
+                        const taskDistributions = assigneeTasks.map(t => ({
+                          task: t,
+                          dist: distributeTaskHours(t),
+                        }));
+                        const workloadTasks = taskDistributions.filter(td => Object.keys(td.dist).length > 0);
+                        const totalHours = workloadTasks.reduce(
+                          (sum, td) => sum + sumHoursInRange(td.dist, rangeStart, workloadRange),
+                          0
+                        );
+
+                        return (
+                          <div key={assignee} className={styles.workloadRow}>
+                            <div className={styles.workloadAssigneeCol}>
+                              <div className={styles.workloadAvatar}>{assignee[0]}</div>
+                              <span style={{ fontWeight: 600, color: '#1e293b', fontSize: '13px', flex: 1 }}>{assignee}</span>
+                              <div style={{ fontSize: '10px', color: '#64748b', background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>
+                                {formatWorkloadHours(totalHours)}/40h
+                              </div>
+                            </div>
+                            {[...Array(workloadRange)].map((_, i) => {
+                              const d = new Date(rangeStart);
+                              d.setDate(d.getDate() + i);
+                              const dateString = toDateKey(d);
+
+                              const tasksOnDate = workloadTasks.filter(
+                                td => (td.dist[dateString] ?? 0) > 0
+                              );
+                              const hoursOnDate = Math.round(
+                                tasksOnDate.reduce((sum, td) => sum + (td.dist[dateString] ?? 0), 0) * 10
+                              ) / 10;
+                              const hasTask = hoursOnDate > 0;
+
+                              return (
+                                <div key={i} className={styles.workloadCell} style={{ position: 'relative' }}>
+                                  <div
+                                    className={`${styles.workloadCellBox} ${hasTask ? styles.workloadCellBoxActive : ''}`}
+                                    onMouseEnter={() => setHoveredWorkloadCell({ assignee, date: dateString })}
+                                    onMouseLeave={() => setHoveredWorkloadCell(null)}
+                                  >
+                                    {formatWorkloadHours(hoursOnDate)}
+                                    {hasTask && <div className={styles.workloadTaskCount}>{tasksOnDate.length}</div>}
+                                  </div>
+                                  {hoveredWorkloadCell?.assignee === assignee && hoveredWorkloadCell?.date === dateString && (
+                                    <div style={{
+                                      position: 'absolute',
+                                      bottom: '100%',
+                                      left: '50%',
+                                      transform: 'translateX(-50%)',
+                                      marginBottom: '8px',
+                                      background: '#0f172a',
+                                      color: 'white',
+                                      padding: '8px 12px',
+                                      borderRadius: '6px',
+                                      fontSize: '12px',
+                                      whiteSpace: 'nowrap',
+                                      zIndex: 100,
+                                      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                                    }}>
+                                      {hasTask ? (
+                                        tasksOnDate.map((td, idx) => (
+                                          <div key={idx}>{td.task.title}</div>
+                                        ))
+                                      ) : (
+                                        <div>Nothing scheduled</div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )
+                      });
+                    })()}
+                  </div>
+
+                  {backlogOpen && (
+                    <div style={{
+                      width: '420px',
+                      background: 'white',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '12px',
+                      overflow: 'hidden',
+                      display: 'flex',
+                      flexDirection: 'column'
+                    }}>
+                      <div style={{
+                        padding: '16px',
+                        borderBottom: '1px solid #e2e8f0',
+                        background: '#f8fafc'
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                          <div style={{ fontSize: '15px', fontWeight: 700, color: '#0f172a' }}>Tasks</div>
+                        </div>
+                        <div style={{ display: 'flex', gap: '12px', fontSize: '13px', color: '#64748b', flexWrap: 'wrap' }}>
+                          {['Unscheduled', 'No estimate', 'Overdue', 'Unassigned'].map(tab => (
+                            <div
+                              key={tab}
+                              onClick={() => setActiveBacklogTab(tab)}
+                              style={{
+                                fontWeight: activeBacklogTab === tab ? 600 : 500,
+                                color: activeBacklogTab === tab ? '#0f172a' : '#64748b',
+                                borderBottom: activeBacklogTab === tab ? '2px solid #0f172a' : '2px solid transparent',
+                                paddingBottom: '8px',
+                                cursor: 'pointer',
+                                whiteSpace: 'nowrap',
+                                flexShrink: 0
+                              }}
+                            >
+                              {tab}
+                            </div>
+                          ))}
+                        </div>
+                        <div style={{ marginTop: '12px', position: 'relative' }}>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }}>
+                            <circle cx="11" cy="11" r="8" />
+                            <path d="m21 21-4.35-4.35" />
+                          </svg>
+                          <input
+                            type="text"
+                            placeholder="Search tasks..."
+                            value={backlogSearchQuery}
+                            onChange={e => setBacklogSearchQuery(e.target.value)}
+                            style={{
+                              width: '100%',
+                              padding: '8px 12px',
+                              paddingLeft: '36px',
+                              border: '1px solid #e2e8f0',
+                              borderRadius: '6px',
+                              fontSize: '13px',
+                              outline: 'none'
+                            }}
+                          />
+                        </div>
                       </div>
-                      <div style={{ fontSize: '13px', color: '#64748b' }}>
+
+                      <div style={{ padding: '12px 16px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <select
+                            value={backlogSortBy}
+                            onChange={e => setBacklogSortBy(e.target.value)}
+                            style={{
+                              padding: '8px 14px',
+                              borderRadius: '8px',
+                              border: '1px solid #e2e8f0',
+                              fontSize: '13px',
+                              fontWeight: 500,
+                              color: '#0f172a',
+                              outline: 'none',
+                              background: '#f8fafc',
+                              cursor: 'pointer',
+                              transition: 'all 0.15s ease'
+                            }}
+                          >
+                            <option value="All Priority">All Priority</option>
+                            <option value="Urgent">Urgent</option>
+                            <option value="High">High</option>
+                            <option value="Normal">Normal</option>
+                            <option value="Low">Low</option>
+                            <option value="Clear">Clear</option>
+                          </select>
+                        </div>
+                        <div style={{ fontSize: '13px', color: '#64748b' }}>
+                          {(() => {
+                            const rangeStart = new Date();
+                            rangeStart.setHours(0, 0, 0, 0);
+                            const rangeEnd = new Date();
+                            rangeEnd.setDate(rangeEnd.getDate() + workloadRange);
+
+                            let filtered = currentTasks.filter(task => {
+                              const matchesSearch = task.title.toLowerCase().includes(backlogSearchQuery.toLowerCase());
+                              const normalizedStatus = task.status.toUpperCase();
+                              const isCompleted = normalizedStatus.includes('COMPLETE') || normalizedStatus.includes('DONE');
+                              return matchesSearch && !isCompleted;
+                            });
+
+                            if (activeBacklogTab === 'Unscheduled') {
+                              filtered = filtered.filter(task => {
+                                const missingStart = !task.startDate;
+                                const missingDue = !task.dueDate;
+
+                                if (missingStart || missingDue) {
+                                  return true;
+                                }
+
+                                const start = new Date(task.startDate!);
+                                const due = new Date(task.dueDate!);
+
+                                const taskStartsAfterRange = start > rangeEnd;
+                                const taskEndsBeforeRange = due < rangeStart;
+
+                                return taskStartsAfterRange || taskEndsBeforeRange;
+                              });
+                            } else if (activeBacklogTab === 'Overdue') {
+                              filtered = filtered.filter(task =>
+                                task.dueDate && new Date(task.dueDate) < rangeStart
+                              );
+                            } else if (activeBacklogTab === 'No estimate') {
+                              filtered = filtered.filter(task =>
+                                !task.timeEstimateHours || task.timeEstimateHours === 0
+                              );
+                            } else if (activeBacklogTab === 'Unassigned') {
+                              filtered = filtered.filter(task =>
+                                !task.assignee || task.assignee.trim() === ''
+                              );
+                            }
+
+                            if (backlogSortBy !== 'All Priority') {
+                              filtered = filtered.filter(task => task.priority === backlogSortBy);
+                            }
+
+                            return `${filtered.length} tasks`;
+                          })()}
+                        </div>
+                      </div>
+
+                      <div style={{ flex: 1, overflowY: 'auto', padding: '8px 16px' }}>
                         {(() => {
                           const rangeStart = new Date();
-                          rangeStart.setHours(0,0,0,0);
+                          rangeStart.setHours(0, 0, 0, 0);
                           const rangeEnd = new Date();
                           rangeEnd.setDate(rangeEnd.getDate() + workloadRange);
-                          
-                          let filtered = currentTasks.filter(task => {
+
+                          let filteredTasks = currentTasks.filter(task => {
                             const matchesSearch = task.title.toLowerCase().includes(backlogSearchQuery.toLowerCase());
                             const normalizedStatus = task.status.toUpperCase();
                             const isCompleted = normalizedStatus.includes('COMPLETE') || normalizedStatus.includes('DONE');
                             return matchesSearch && !isCompleted;
                           });
-                          
+
                           if (activeBacklogTab === 'Unscheduled') {
-                            filtered = filtered.filter(task => {
+                            filteredTasks = filteredTasks.filter(task => {
                               const missingStart = !task.startDate;
                               const missingDue = !task.dueDate;
-                              
+
                               if (missingStart || missingDue) {
                                 return true;
                               }
-                              
+
                               const start = new Date(task.startDate!);
                               const due = new Date(task.dueDate!);
-                              
+
                               const taskStartsAfterRange = start > rangeEnd;
                               const taskEndsBeforeRange = due < rangeStart;
-                              
+
                               return taskStartsAfterRange || taskEndsBeforeRange;
                             });
                           } else if (activeBacklogTab === 'Overdue') {
-                            filtered = filtered.filter(task => 
+                            filteredTasks = filteredTasks.filter(task =>
                               task.dueDate && new Date(task.dueDate) < rangeStart
                             );
                           } else if (activeBacklogTab === 'No estimate') {
-                            filtered = filtered.filter(task => 
+                            filteredTasks = filteredTasks.filter(task =>
                               !task.timeEstimateHours || task.timeEstimateHours === 0
                             );
                           } else if (activeBacklogTab === 'Unassigned') {
-                            filtered = filtered.filter(task => 
+                            filteredTasks = filteredTasks.filter(task =>
                               !task.assignee || task.assignee.trim() === ''
                             );
                           }
-                          
+
                           if (backlogSortBy !== 'All Priority') {
-                            filtered = filtered.filter(task => task.priority === backlogSortBy);
+                            filteredTasks = filteredTasks.filter(task => task.priority === backlogSortBy);
                           }
-                          
-                          return `${filtered.length} tasks`;
+
+                          const priorityOrder = ['Urgent', 'High', 'Normal', 'Low', 'Clear'];
+                          const sortedTasks = [...filteredTasks].sort((a, b) => {
+                            const indexA = priorityOrder.indexOf(a.priority || 'Normal');
+                            const indexB = priorityOrder.indexOf(b.priority || 'Normal');
+                            return indexA - indexB;
+                          });
+
+                          return sortedTasks.map(task => (
+                            <div key={task.id} style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '12px',
+                              padding: '10px 0',
+                              borderBottom: '1px solid #f1f5f9',
+                              cursor: 'pointer'
+                            }} onClick={() => openModal('Rename', task.id, 'task', task.title, task)}>
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2">
+                                <circle cx="12" cy="12" r="10" />
+                              </svg>
+                              <div style={{ fontSize: '14px', color: '#0f172a', fontWeight: 500 }}>{task.title}</div>
+                            </div>
+                          ));
                         })()}
                       </div>
                     </div>
-
-                    <div style={{ flex: 1, overflowY: 'auto', padding: '8px 16px' }}>
-                      {(() => {
-                        const rangeStart = new Date();
-                        rangeStart.setHours(0,0,0,0);
-                        const rangeEnd = new Date();
-                        rangeEnd.setDate(rangeEnd.getDate() + workloadRange);
-                        
-                        let filteredTasks = currentTasks.filter(task => {
-                          const matchesSearch = task.title.toLowerCase().includes(backlogSearchQuery.toLowerCase());
-                          const normalizedStatus = task.status.toUpperCase();
-                          const isCompleted = normalizedStatus.includes('COMPLETE') || normalizedStatus.includes('DONE');
-                          return matchesSearch && !isCompleted;
-                        });
-                        
-                        if (activeBacklogTab === 'Unscheduled') {
-                          filteredTasks = filteredTasks.filter(task => {
-                            const missingStart = !task.startDate;
-                            const missingDue = !task.dueDate;
-                            
-                            if (missingStart || missingDue) {
-                              return true;
-                            }
-                            
-                            const start = new Date(task.startDate!);
-                            const due = new Date(task.dueDate!);
-                            
-                            const taskStartsAfterRange = start > rangeEnd;
-                            const taskEndsBeforeRange = due < rangeStart;
-                            
-                            return taskStartsAfterRange || taskEndsBeforeRange;
-                          });
-                        } else if (activeBacklogTab === 'Overdue') {
-                          filteredTasks = filteredTasks.filter(task => 
-                            task.dueDate && new Date(task.dueDate) < rangeStart
-                          );
-                        } else if (activeBacklogTab === 'No estimate') {
-                          filteredTasks = filteredTasks.filter(task => 
-                            !task.timeEstimateHours || task.timeEstimateHours === 0
-                          );
-                        } else if (activeBacklogTab === 'Unassigned') {
-                          filteredTasks = filteredTasks.filter(task => 
-                            !task.assignee || task.assignee.trim() === ''
-                          );
-                        }
-                        
-                        if (backlogSortBy !== 'All Priority') {
-                          filteredTasks = filteredTasks.filter(task => task.priority === backlogSortBy);
-                        }
-
-                        const priorityOrder = ['Urgent', 'High', 'Normal', 'Low', 'Clear'];
-                        const sortedTasks = [...filteredTasks].sort((a, b) => {
-                          const indexA = priorityOrder.indexOf(a.priority || 'Normal');
-                          const indexB = priorityOrder.indexOf(b.priority || 'Normal');
-                          return indexA - indexB;
-                        });
-                        
-                        return sortedTasks.map(task => (
-                          <div key={task.id} style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '12px',
-                            padding: '10px 0',
-                            borderBottom: '1px solid #f1f5f9',
-                            cursor: 'pointer'
-                          }} onClick={() => openModal('Rename', task.id, 'task', task.title, task)}>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2">
-                              <circle cx="12" cy="12" r="10" />
-                            </svg>
-                            <div style={{ fontSize: '14px', color: '#0f172a', fontWeight: 500 }}>{task.title}</div>
-                          </div>
-                        ));
-                      })()}
-                    </div>
-                  </div>
-                )}
+                  )}
                 </div>
               </div>
             )}
@@ -4961,8 +4961,8 @@ export default function SpacesPage() {
                       <div className={styles.calendarHeaderMini}>
                         <span>{new Date(calendarYear, calendarMonth).toLocaleDateString('default', { month: 'long', year: 'numeric' })}</span>
                         <div style={{ display: 'flex', gap: '8px' }}>
-                          <span 
-                            style={{ cursor: 'pointer', userSelect: 'none' }} 
+                          <span
+                            style={{ cursor: 'pointer', userSelect: 'none' }}
                             onClick={(e) => {
                               e.stopPropagation();
                               setCalendarMonth(prev => prev === 0 ? 11 : prev - 1);
@@ -4971,8 +4971,8 @@ export default function SpacesPage() {
                           >
                             &lt;
                           </span>
-                          <span 
-                            style={{ cursor: 'pointer', userSelect: 'none' }} 
+                          <span
+                            style={{ cursor: 'pointer', userSelect: 'none' }}
                             onClick={(e) => {
                               e.stopPropagation();
                               setCalendarMonth(prev => prev === 11 ? 0 : prev + 1);
@@ -4992,20 +4992,20 @@ export default function SpacesPage() {
                           const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
                           const daysInMonth = new Date(calendarYear, calendarMonth + 1, 0).getDate();
                           const firstDayOfMonth = new Date(calendarYear, calendarMonth, 1).getDay();
-                          
+
                           const calendarDays: JSX.Element[] = [];
-                          
+
                           // Add empty cells for days before the first day of the month
                           for (let i = 0; i < firstDayOfMonth; i++) {
                             calendarDays.push(<div key={`empty-${i}`} style={{ visibility: 'hidden' }} />);
                           }
-                          
+
                           // Add days of the month
                           for (let day = 1; day <= daysInMonth; day++) {
                             const date = new Date(calendarYear, calendarMonth, day);
                             const isPast = date < todayStart;
                             const isSelected = calendarSelectedDay === day;
-                            
+
                             calendarDays.push(
                               <div
                                 key={day}
@@ -5025,7 +5025,7 @@ export default function SpacesPage() {
                               </div>
                             );
                           }
-                          
+
                           return calendarDays;
                         })()}
                       </div>
@@ -5035,7 +5035,7 @@ export default function SpacesPage() {
                           value={manualTime}
                           className={styles.dateInputSmall}
                           style={{ marginTop: '8px', flex: 1 }}
-                          min={(function() {
+                          min={(function () {
                             const now = new Date();
                             const selectedDate = new Date(calendarYear, calendarMonth, calendarSelectedDay);
                             const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -5053,12 +5053,12 @@ export default function SpacesPage() {
                             const d = new Date(calendarYear, calendarMonth, calendarSelectedDay);
                             const [h, m] = manualTime.split(':');
                             d.setHours(parseInt(h), parseInt(m), 0, 0);
-                            
+
                             if (d < now) {
                               showToast('Please select a future date and time!', 'error');
                               return;
                             }
-                            
+
                             setTaskReminder(contextMenu.id, d);
                             closeContextMenu();
                           }}
@@ -5304,7 +5304,7 @@ export default function SpacesPage() {
 
       {/* Full-Screen Image Preview */}
       {isFullScreenPreviewOpen && (
-        <div 
+        <div
           style={{
             position: 'fixed',
             top: 0,
@@ -5317,10 +5317,10 @@ export default function SpacesPage() {
             justifyContent: 'center',
             zIndex: 99999,
             cursor: 'pointer'
-          }} 
+          }}
           onClick={closeFullScreenPreview}
         >
-          <button 
+          <button
             style={{
               position: 'absolute',
               top: 24,
@@ -5339,10 +5339,10 @@ export default function SpacesPage() {
           >
             ×
           </button>
-          
+
           {fullScreenPreviewImages.length > 1 && (
             <>
-              <button 
+              <button
                 style={{
                   position: 'absolute',
                   left: 24,
@@ -5360,14 +5360,14 @@ export default function SpacesPage() {
                 }}
                 onClick={(e) => {
                   e.stopPropagation();
-                  setFullScreenPreviewIndex(prev => 
+                  setFullScreenPreviewIndex(prev =>
                     (prev - 1 + fullScreenPreviewImages.length) % fullScreenPreviewImages.length
                   );
                 }}
               >
                 ‹
               </button>
-              <button 
+              <button
                 style={{
                   position: 'absolute',
                   right: 24,
@@ -5385,7 +5385,7 @@ export default function SpacesPage() {
                 }}
                 onClick={(e) => {
                   e.stopPropagation();
-                  setFullScreenPreviewIndex(prev => 
+                  setFullScreenPreviewIndex(prev =>
                     (prev + 1) % fullScreenPreviewImages.length
                   );
                 }}
@@ -5394,8 +5394,8 @@ export default function SpacesPage() {
               </button>
             </>
           )}
-          
-          <img 
+
+          <img
             src={getDisplayImageUrl(fullScreenPreviewImages[fullScreenPreviewIndex])}
             alt="Full screen preview"
             style={{
@@ -5406,7 +5406,7 @@ export default function SpacesPage() {
             }}
             onClick={(e) => e.stopPropagation()}
           />
-          
+
           {fullScreenPreviewImages.length > 1 && (
             <div style={{
               position: 'absolute',
