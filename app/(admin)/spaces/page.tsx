@@ -4742,9 +4742,38 @@ export default function SpacesPage() {
                             ))}
                           </optgroup>
                           <optgroup label="Move to List">
-                            {lists.map(l => (
-                              <option key={l.id} value={l.id}>{l.name}</option>
-                            ))}
+                            {lists
+                              .filter(l => {
+                                const folder = folders.find(f => f.id === l.parentId);
+                                const space = spaces.find(s => s.id === l.parentId);
+                                return folder || space;
+                              })
+                              .map(l => {
+                                let spaceName = '';
+                                let parentName = '';
+                                const folder = folders.find(f => f.id === l.parentId);
+                                if (folder) {
+                                  parentName = folder.name;
+                                  const space = spaces.find(s => s.id === folder.spaceId);
+                                  if (space) {
+                                    spaceName = space.name;
+                                  }
+                                } else {
+                                  const space = spaces.find(s => s.id === l.parentId);
+                                  if (space) {
+                                    spaceName = space.name;
+                                  }
+                                }
+                                const listName = l.name || 'Unnamed List';
+                                const labelParts = [listName];
+                                if (parentName) labelParts.push(parentName);
+                                if (spaceName) labelParts.push(spaceName);
+                                return (
+                                  <option key={l.id} value={l.id}>
+                                    {labelParts.join(' / ')}
+                                  </option>
+                                );
+                              })}
                           </optgroup>
                         </>
                       )}
