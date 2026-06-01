@@ -1862,9 +1862,14 @@ export default function SpacesPage() {
 
   const selectAllInGroup = (status: string) => {
     const groupTaskIds = currentTasks.filter(t => t.status === status).map(t => t.id);
+    const allSelected = groupTaskIds.every(id => selectedTaskIds.has(id));
     setSelectedTaskIds(prev => {
       const next = new Set(prev);
-      groupTaskIds.forEach(id => next.add(id));
+      if (allSelected) {
+        groupTaskIds.forEach(id => next.delete(id));
+      } else {
+        groupTaskIds.forEach(id => next.add(id));
+      }
       return next;
     });
   };
@@ -2491,12 +2496,22 @@ export default function SpacesPage() {
                           onClick={(e) => {
                             e.stopPropagation();
                             if (selectedTaskIds.size > 0) {
-                              // In selection mode: toggle this task's selection
-                              setSelectedTaskIds(prev => {
-                                const next = new Set(prev);
-                                if (next.has(task.id)) next.delete(task.id); else next.add(task.id);
-                                return next;
-                              });
+                              // Check if any selected task shares the same status as this task
+                              const selectedTasks = currentTasks.filter(t => selectedTaskIds.has(t.id));
+                              const sameStatus = selectedTasks.some(t => t.status === task.status);
+                              
+                              if (sameStatus) {
+                                // In selection mode and same status: toggle this task's selection
+                                setSelectedTaskIds(prev => {
+                                  const next = new Set(prev);
+                                  if (next.has(task.id)) next.delete(task.id); else next.add(task.id);
+                                  return next;
+                                });
+                              } else {
+                                // Different status: clear selection and open the task
+                                setSelectedTaskIds(new Set());
+                                openModal('Rename', task.id, 'task', task.title, task);
+                              }
                             } else {
                               openModal('Rename', task.id, 'task', task.title, task);
                             }
@@ -5099,7 +5114,11 @@ export default function SpacesPage() {
               <div className={styles.contextMenuDivider}></div>
               <div className={styles.contextMenuItem} onClick={() => { selectAllInGroup(contextMenu.id); closeContextMenu(); }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m9 11 3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>
-                Select all
+                {(() => {
+                  const groupTaskIds = currentTasks.filter(t => t.status === contextMenu.id).map(t => t.id);
+                  const allSelected = groupTaskIds.every(id => selectedTaskIds.has(id));
+                  return allSelected ? 'Unselect all' : 'Select all';
+                })()}
               </div>
             </>
           ) : contextMenu.type === 'task' ? (

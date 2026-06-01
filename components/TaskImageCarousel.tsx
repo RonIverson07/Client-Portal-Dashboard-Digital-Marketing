@@ -71,11 +71,11 @@ export function TaskImageCarousel({
       onKeyDown={
         onImageClick
           ? e => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                onImageClick(index);
-              }
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              onImageClick(index);
             }
+          }
           : undefined
       }
     >
