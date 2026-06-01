@@ -545,6 +545,74 @@ export default function SpacesPage() {
     fetchData();
   }, []);
 
+  // Periodic polling: sync Google Drive folder tasks every 30 seconds
+  const syncingRef = useRef(false);
+  const syncDriveFolders = useRef(async (currentTasks: SpaceTask[]) => {
+    if (syncingRef.current) return;
+    const driveFolderTasks = currentTasks.filter(t => t.coverImageUrl && isGoogleDriveFolderUrl(t.coverImageUrl));
+    if (driveFolderTasks.length === 0) return;
+
+    syncingRef.current = true;
+    try {
+      for (const task of driveFolderTasks) {
+        if (!task.coverImageUrl) continue;
+        try {
+          const freshImages = await resolveDriveFolderImages(task.coverImageUrl);
+          if (freshImages.length > 0) {
+            const currentImages = Array.isArray(task.imageUrls) ? task.imageUrls : [];
+            const changed =
+              freshImages.length !== currentImages.length ||
+              freshImages.some((url: string, idx: number) => url !== currentImages[idx]);
+
+            if (changed) {
+              setTasks(prev =>
+                prev.map(t =>
+                  t.id === task.id ? { ...t, imageUrls: freshImages } : t
+                )
+              );
+
+              // Update active modal if editing this task
+              if (editingTaskIdRef.current === task.id) {
+                setModalConfig(prev => ({
+                  ...prev,
+                  coverImageUrls: freshImages
+                }));
+              }
+
+              // Persist to database
+              await fetch(`/api/admin/project-tasks`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  id: task.id,
+                  image_urls: freshImages,
+                }),
+              });
+            }
+          }
+        } catch (err) {
+          console.error(`Drive sync failed for task ${task.id}:`, err);
+        }
+      }
+    } finally {
+      syncingRef.current = false;
+    }
+  });
+
+  const tasksRef = useRef(tasks);
+  tasksRef.current = tasks;
+
+  useEffect(() => {
+    if (tasks.length === 0) return;
+    // Initial sync
+    syncDriveFolders.current(tasks);
+    // Periodic polling
+    const interval = setInterval(() => {
+      syncDriveFolders.current(tasksRef.current);
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [tasks.length > 0]);
+
   const mapTask = (
     t: any,
     parentOverride?: string | null,
@@ -790,6 +858,28 @@ export default function SpacesPage() {
         })
         .catch(() => { })
         .finally(() => setLoadingChecklist(false));
+
+      const rawUrl = String(initialData.coverImageUrl ?? initialData.cover_image_url ?? '').trim();
+      if (isGoogleDriveFolderUrl(rawUrl)) {
+        setResolvingCoverFolder(true);
+        resolveDriveFolderImages(rawUrl).then(folderImages => {
+          if (folderImages.length > 0) {
+            setModalConfig(prev => {
+              if (prev.targetId === targetId && prev.isOpen) {
+                return { ...prev, coverImageUrls: folderImages };
+              }
+              return prev;
+            });
+            setTasks(prev => prev.map(t => t.id === targetId ? { ...t, imageUrls: folderImages } : t));
+          } else {
+            setCoverPreviewError(true);
+          }
+        }).catch(() => {
+          setCoverPreviewError(true);
+        }).finally(() => {
+          setResolvingCoverFolder(false);
+        });
+      }
     } else {
       editingTaskIdRef.current = null;
     }
@@ -804,6 +894,75 @@ export default function SpacesPage() {
     setChecklistInput('');
     editingTaskIdRef.current = null;
   };
+
+  // Real-time polling for Google Drive folder images while edit modal is open
+  useEffect(() => {
+    if (!modalConfig.isOpen) return;
+    if (modalConfig.type !== 'Rename' || modalConfig.targetType !== 'task') return;
+
+    const rawUrl = modalConfig.coverImageUrl.trim();
+    if (!isGoogleDriveFolderUrl(rawUrl)) return;
+
+    let cancelled = false;
+
+    const pollDriveImages = async () => {
+      if (cancelled) return;
+      try {
+        const freshImages = await resolveDriveFolderImages(rawUrl);
+        if (cancelled || freshImages.length === 0) return;
+
+        setModalConfig(prev => {
+          if (!prev.isOpen || prev.targetId !== modalConfig.targetId) return prev;
+          const currentImages = prev.coverImageUrls;
+          const changed =
+            freshImages.length !== currentImages.length ||
+            freshImages.some((url, idx) => url !== currentImages[idx]);
+          if (changed) {
+            return { ...prev, coverImageUrls: freshImages };
+          }
+          return prev;
+        });
+
+        // Also update tasks state and persist to DB
+        if (modalConfig.targetId) {
+          setTasks(prev => {
+            const task = prev.find(t => t.id === modalConfig.targetId);
+            if (!task) return prev;
+            const currentImages = Array.isArray(task.imageUrls) ? task.imageUrls : [];
+            const changed =
+              freshImages.length !== currentImages.length ||
+              freshImages.some((url, idx) => url !== currentImages[idx]);
+            if (changed) {
+              // Persist to database
+              fetch('/api/admin/project-tasks', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  id: modalConfig.targetId,
+                  image_urls: freshImages,
+                }),
+              }).catch(err => console.error('Drive sync persist failed:', err));
+
+              return prev.map(t =>
+                t.id === modalConfig.targetId ? { ...t, imageUrls: freshImages } : t
+              );
+            }
+            return prev;
+          });
+        }
+      } catch (err) {
+        console.error('Edit modal Drive folder poll failed:', err);
+      }
+    };
+
+    // Poll every 30 seconds while modal is open
+    const interval = setInterval(pollDriveImages, 30000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [modalConfig.isOpen, modalConfig.type, modalConfig.targetType, modalConfig.coverImageUrl, modalConfig.targetId]);
 
   const addChecklistItem = async () => {
     const text = checklistInput.trim();
@@ -1090,7 +1249,7 @@ export default function SpacesPage() {
           return;
         }
         resolvedImageUrls = images;
-        resolvedCoverUrl = images[0];
+        resolvedCoverUrl = rawUrl;
       } else if (gallery.length > 1) {
         resolvedImageUrls = gallery;
         resolvedCoverUrl = gallery[0];
