@@ -80,7 +80,7 @@
 .taskThumb {
   width: 80px;
   height: 60px;
-  object-fit: cover;
+  object-fit: contain;
   border-radius: var(--radius-sm);
   flex-shrink: 0;
   background: var(--color-surface-2);
@@ -212,7 +212,8 @@
 .boardCardImage {
   width: 100%;
   min-height: 120px;
-  object-fit: cover;
+  object-fit: contain;
+  background: var(--color-surface-2);
 }
 
 .formPreviewImage {
@@ -220,8 +221,9 @@
   max-height: 160px;
   width: 100%;
   border-radius: 6px;
-  object-fit: cover;
+  object-fit: contain;
   border: 1px solid var(--color-border);
+  background: var(--color-surface-2);
 }
 
 .carouselWrap {
@@ -389,7 +391,7 @@
 .mobileAdminCardImg {
   width: 100%;
   aspect-ratio: 16/9;
-  object-fit: cover;
+  object-fit: contain;
   display: block;
   background: var(--color-surface-2);
 }

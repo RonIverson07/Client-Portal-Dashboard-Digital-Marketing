@@ -280,6 +280,14 @@ function TasksContent() {
   
   const [isOverCol, setIsOverCol] = useState<string | null>(null);
   const dragTaskId = useRef<number | null>(null);
+  const [autoSyncEnabled, setAutoSyncEnabled] = useState(true); // Auto-sync enabled by default
+  const [lastSynced, setLastSynced] = useState<Date | null>(null);
+
+  // Refs for syncing
+  const tasksRef = useRef(tasks);
+  tasksRef.current = tasks;
+  const syncingRef = useRef(false); // For Google Drive folder sync
+  const clickUpSyncingRef = useRef(false); // For ClickUp auto-sync
 
   async function resolveDriveFolderImages(folderUrl: string): Promise<string[]> {
     const res = await fetch(`/api/drive/folder-images?url=${encodeURIComponent(folderUrl)}`, {
@@ -322,8 +330,6 @@ function TasksContent() {
   }, []);
 
   // Periodic polling: sync Google Drive folder tasks every 30 seconds
-  const syncingRef = useRef(false);
-
   const syncDriveFolders = useRef(async (currentTasks: Task[]) => {
     if (syncingRef.current) return;
     const driveFolderTasks = currentTasks.filter(t => isGoogleDriveFolderUrl(t.image_url));
@@ -375,10 +381,40 @@ function TasksContent() {
     }
   });
 
-  // Run sync on initial load and then every 30 seconds
-  const tasksRef = useRef(tasks);
-  tasksRef.current = tasks;
+  // Auto-sync with ClickUp every 10 seconds (if enabled)
+  useEffect(() => {
+    if (!autoSyncEnabled) return;
 
+    const autoSyncClickUp = async () => {
+      if (clickUpSyncingRef.current || syncingClickUp) return;
+      clickUpSyncingRef.current = true;
+      try {
+        const res = await fetch('/api/admin/clickup/sync', {
+          method: 'POST',
+          credentials: 'include',
+        });
+        if (res.ok) {
+          const data = await res.json();
+          console.log('Auto-sync successful:', data);
+          setLastSynced(new Date());
+          loadData(); // Refresh tasks
+        }
+      } catch (err) {
+        console.error('Auto-sync failed:', err);
+      } finally {
+        clickUpSyncingRef.current = false;
+      }
+    };
+
+    // Run auto-sync immediately when enabled
+    autoSyncClickUp();
+
+    // Then run every 10 seconds
+    const interval = setInterval(autoSyncClickUp, 10000);
+    return () => clearInterval(interval);
+  }, [autoSyncEnabled, syncingClickUp]);
+
+  // Run Google Drive folder sync on initial load and then every 30 seconds
   useEffect(() => {
     if (tasks.length === 0) return;
     // Initial sync
@@ -609,7 +645,24 @@ function TasksContent() {
           <h1 className={styles.pageTitle}>Tasks</h1>
           <p className={styles.pageSubtitle}>{filteredTasks.length} of {tasks.length} task{tasks.length !== 1 ? 's' : ''}</p>
         </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px' }}>
+            <input
+              type="checkbox"
+              id="autoSyncToggle"
+              checked={autoSyncEnabled}
+              onChange={(e) => setAutoSyncEnabled(e.target.checked)}
+              style={{ width: '16px', height: '16px' }}
+            />
+            <label htmlFor="autoSyncToggle" style={{ margin: 0 }}>
+              Auto-sync every 10s
+            </label>
+            {lastSynced && (
+              <span style={{ color: 'var(--color-text-muted)', fontSize: '12px' }}>
+                Last synced: {lastSynced.toLocaleTimeString()}
+              </span>
+            )}
+          </div>
           <button className="btn btn-secondary" onClick={handleClickUpSync} disabled={syncingClickUp}>
             {syncingClickUp ? 'Syncing…' : 'Sync with ClickUp'}
           </button>
