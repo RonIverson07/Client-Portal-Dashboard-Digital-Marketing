@@ -3,7 +3,7 @@ export const revalidate = 0;
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/lib/supabase';
 import { getAdminFromRequest } from '@/lib/auth';
-import { updateClickUpTaskStatus, updateClickUpTaskTitle } from '@/lib/clickup';
+import { updateClickUpTaskStatus, updateClickUpTaskTitle, updateClickUpDesignOutputLink, updateClickUpCaption, updateClickUpTaskDescription } from '@/lib/clickup';
 
 interface RouteParams {
   params: { id: string };
@@ -133,23 +133,82 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
     }
 
     // Sync title change to ClickUp if task has a ClickUp ID
-    if (title && title.trim() !== current.title && current.clickup_task_id) {
-      // Get ClickUp settings
-      const { data: settings, error: settingsError } = await supabase
-        .from('settings')
-        .select('*')
-        .eq('id', 1)
-        .single();
+  if (title && title.trim() !== current.title && current.clickup_task_id) {
+    // Get ClickUp settings
+    const { data: settings, error: settingsError } = await supabase
+      .from('settings')
+      .select('*')
+      .eq('id', 1)
+      .single();
 
-      if (!settingsError && settings?.clickup_api_token) {
-        try {
-          await updateClickUpTaskTitle(settings.clickup_api_token, current.clickup_task_id, title.trim());
-        } catch (clickupErr) {
-          console.error('Failed to update ClickUp task title:', clickupErr);
-          // Don't fail the whole request if ClickUp sync fails
-        }
+    if (!settingsError && settings?.clickup_api_token) {
+      try {
+        await updateClickUpTaskTitle(settings.clickup_api_token, current.clickup_task_id, title.trim());
+      } catch (clickupErr) {
+        console.error('Failed to update ClickUp task title:', clickupErr);
+        // Don't fail the whole request if ClickUp sync fails
       }
     }
+  }
+
+  // Sync image_url to ClickUp as "Design Output Link" custom field
+  console.log('Checking if need to update Design Output Link:', {
+    image_url,
+    currentImageUrl: current.image_url,
+    clickupTaskId: current.clickup_task_id,
+  });
+  
+  // If there's a ClickUp task ID and we have an image_url, try to sync (even if it hasn't changed locally)
+  if (image_url && current.clickup_task_id) {
+    console.log('Proceeding to update Design Output Link in ClickUp');
+    // Get ClickUp settings
+    const { data: settings, error: settingsError } = await supabase
+      .from('settings')
+      .select('*')
+      .eq('id', 1)
+      .single();
+
+    if (!settingsError && settings?.clickup_api_token) {
+      try {
+        console.log('Calling updateClickUpDesignOutputLink with:', {
+          taskId: current.clickup_task_id,
+          link: image_url.trim(),
+        });
+        await updateClickUpDesignOutputLink(settings.clickup_api_token, current.clickup_task_id, image_url.trim());
+      } catch (clickupErr) {
+        console.error('Failed to update ClickUp task Design Output Link:', clickupErr);
+        // Don't fail the whole request if ClickUp sync fails
+      }
+    } else {
+      console.warn('Skipping ClickUp sync because settings error or no API token:', {
+        settingsError,
+        hasApiToken: !!settings?.clickup_api_token,
+      });
+    }
+  } else {
+    console.log('Not updating Design Output Link: no image_url or no ClickUp task ID');
+  }
+
+  // Sync caption to ClickUp as "Caption" custom field AND task description
+  if (caption && current.clickup_task_id) {
+    // Get ClickUp settings
+    const { data: settings, error: settingsError } = await supabase
+      .from('settings')
+      .select('*')
+      .eq('id', 1)
+      .single();
+
+    if (!settingsError && settings?.clickup_api_token) {
+      try {
+        // Update both the "Caption" custom field and the ClickUp task description
+        await updateClickUpCaption(settings.clickup_api_token, current.clickup_task_id, caption.trim());
+        await updateClickUpTaskDescription(settings.clickup_api_token, current.clickup_task_id, caption.trim());
+      } catch (clickupErr) {
+        console.error('Failed to update ClickUp task Caption/Description:', clickupErr);
+        // Don't fail the whole request if ClickUp sync fails
+      }
+    }
+  }
 
     const formattedTask = {
       ...updatedTask,
