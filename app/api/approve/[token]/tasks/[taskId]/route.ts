@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/lib/supabase';
 import { sendNotificationEmail } from '@/lib/email';
 import { revalidatePath } from 'next/cache';
+import { updateClickUpTaskStatus } from '@/lib/clickup';
 
 interface RouteParams {
   params: { token: string; taskId: string };
@@ -74,6 +75,25 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
       new_value: status 
     }
   ]);
+
+  // Sync status change to ClickUp if task has a ClickUp ID
+  if (task.clickup_task_id) {
+    // Get ClickUp settings
+    const { data: settings, error: settingsError } = await supabase
+      .from('settings')
+      .select('*')
+      .eq('id', 1)
+      .single();
+
+    if (!settingsError && settings?.clickup_api_token) {
+      try {
+        await updateClickUpTaskStatus(settings.clickup_api_token, task.clickup_task_id, status, settings);
+      } catch (clickupErr) {
+        console.error('Failed to update ClickUp task status (client approval):', clickupErr);
+        // Don't fail the whole request if ClickUp sync fails
+      }
+    }
+  }
 
   // 4. Send Email Notification (Non-blocking as much as possible)
   const emailPromise = (async () => {

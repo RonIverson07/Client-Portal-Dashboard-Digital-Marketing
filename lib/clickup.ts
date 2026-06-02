@@ -153,5 +153,7 @@ export function extractCaption(task: any): string {
   }
   
   // Fallback to task description
-  return task.description || '';
+  const description = task.description || '';
+  // Ensure we never return empty string to avoid validation issues
+  return description.trim() || ' ';
 }

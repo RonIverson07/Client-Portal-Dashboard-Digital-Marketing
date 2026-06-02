@@ -55,11 +55,13 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
     console.log('--- TASK UPDATE DEBUG ---');
     console.log('Updating Task ID:', params.id);
     console.log('New Client ID received:', client_id);
+    console.log('Received fields:', { client_id, title, image_url, image_urls, caption, status });
     console.log('-------------------------');
 
-    if (!title?.trim()) return NextResponse.json({ error: 'Title is required.' }, { status: 400 });
-    if (!image_url?.trim()) return NextResponse.json({ error: 'Image URL is required.' }, { status: 400 });
-    if (!caption?.trim()) return NextResponse.json({ error: 'Caption is required.' }, { status: 400 });
+    // Only validate required fields if we're actually updating them
+    if (title !== undefined && !title?.trim()) return NextResponse.json({ error: 'Title is required.' }, { status: 400 });
+    if (image_url !== undefined && !image_url?.trim()) return NextResponse.json({ error: 'Image URL is required.' }, { status: 400 });
+    if (caption !== undefined && !caption?.trim()) return NextResponse.json({ error: 'Caption is required.' }, { status: 400 });
 
     const validStatuses = ['for_review', 'approved', 'for_revision', 'published'];
     if (status && !validStatuses.includes(status)) {
@@ -78,10 +80,10 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
       .from('tasks')
       .update({
         client_id: client_id !== undefined ? Number(client_id) : current.client_id,
-        title: title.trim(),
-        image_url: image_url.trim(),
-        image_urls: Array.isArray(image_urls) ? image_urls : null,
-        caption: caption.trim(),
+        title: title !== undefined ? title.trim() : current.title,
+        image_url: image_url !== undefined ? image_url.trim() : current.image_url,
+        image_urls: image_urls !== undefined ? (Array.isArray(image_urls) ? image_urls : null) : current.image_urls,
+        caption: caption !== undefined ? caption.trim() : current.caption,
         status: status || current.status,
         updated_at: new Date().toISOString()
       })

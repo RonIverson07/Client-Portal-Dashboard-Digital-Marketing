@@ -550,26 +550,36 @@ function TasksContent() {
   }
 
   async function handleStatusChange(taskId: number, status: string) {
+    console.log('handleStatusChange called with:', { taskId, status });
     const task = tasks.find(t => t.id === taskId);
-    if (!task) return;
+    console.log('Found task for status change:', task);
+    if (!task) {
+      console.log('Task not found!');
+      return;
+    }
 
-    const res = await fetch(`/api/admin/tasks/${taskId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({
-        title: task.title,
-        image_url: task.image_url,
-        image_urls: task.image_urls || null,
-        caption: task.caption,
-        status,
-      }),
-    });
+    try {
+      console.log('Sending PUT request to /api/admin/tasks/' + taskId + ' with status:', status);
+      const res = await fetch(`/api/admin/tasks/${taskId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ status }), // Only send what's needed!
+      });
 
-    if (res.ok) {
-      showToast('Status updated.');
-      setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status } : t));
-      if (selectedTask?.id === taskId) setSelectedTask(prev => prev ? { ...prev, status } : null);
+      console.log('Response status:', res.status, res.ok);
+      if (res.ok) {
+        showToast('Status updated.');
+        setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status } : t));
+        if (selectedTask?.id === taskId) setSelectedTask(prev => prev ? { ...prev, status } : null);
+      } else {
+        const errorData = await res.json();
+        console.error('Error updating status:', errorData);
+        showToast('Failed to update status.');
+      }
+    } catch (err) {
+      console.error('handleStatusChange error:', err);
+      showToast('An error occurred.');
     }
   }
 
