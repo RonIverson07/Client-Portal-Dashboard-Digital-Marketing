@@ -132,10 +132,6 @@ export default function AdminLoginPage() {
             ) : 'Sign in'}
           </button>
         </form>
-
-        <p className={styles.hint}>
-          Default credentials: <code>admin@portal.com</code> / <code>Admin1234!</code>
-        </p>
       </div>
     </div>
   );

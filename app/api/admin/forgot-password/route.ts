@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
 
     if (updateError) throw updateError;
 
-    const adminEmail = 'roniversonroguel.startuplab@gmail.com';
+    const adminEmail = 'robimikemanalo.ih@gmail.com';
     const subject = `Your New Temporary Password`;
     const html = `
       <div style="font-family: sans-serif; line-height: 1.5; color: #333; max-width: 600px; border: 1px solid #eee; padding: 20px; border-radius: 8px;">
