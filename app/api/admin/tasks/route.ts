@@ -3,6 +3,12 @@ export const revalidate = 0;
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/lib/supabase';
 import { getAdminFromRequest } from '@/lib/auth';
+import {
+  createClickUpTask,
+  updateClickUpDesignOutputLink,
+  updateClickUpCaption,
+  updateClickUpClient
+} from '@/lib/clickup';
 
 export async function GET(req: NextRequest) {
   const admin = getAdminFromRequest(req);
@@ -64,11 +70,74 @@ export async function POST(req: NextRequest) {
     // Check if client exists
     const { data: client, error: clientError } = await supabase
       .from('clients')
-      .select('id')
+      .select('id, company_name')
       .eq('id', client_id)
       .single();
 
     if (clientError || !client) return NextResponse.json({ error: 'Client not found.' }, { status: 404 });
+
+    // Get ClickUp settings (by id=1)
+    console.log('Getting ClickUp settings (by id=1)');
+    const { data: settingsData, error: settingsError } = await supabase
+      .from('settings')
+      .select('*')
+      .eq('id', 1)
+      .single();
+
+    const settings = settingsData || {};
+    console.log('ClickUp settings:', {
+      hasApiToken: !!settings.clickup_api_token,
+      hasListId: !!settings.clickup_list_id,
+      settingsKeys: Object.keys(settings)
+    });
+    let clickupTaskId: string | null = null;
+
+    // Create task in ClickUp if we have API token and List ID
+    const clickupApiToken = settings.clickup_api_token;
+    const clickupListId = settings.clickup_list_id;
+    console.log('Checking if we should create ClickUp task:', { clickupApiToken: !!clickupApiToken, clickupListId: !!clickupListId });
+    if (clickupApiToken && clickupListId) {
+      try {
+        console.log('Creating task in ClickUp:', { title, caption });
+        const clickupTask = await createClickUpTask(
+          clickupApiToken,
+          clickupListId,
+          title.trim(),
+          caption.trim(),
+          'for_review',
+          settings
+        );
+        console.log('ClickUp create task response:', clickupTask);
+        
+        if (clickupTask && clickupTask.id) {
+          clickupTaskId = clickupTask.id;
+          console.log('Successfully created ClickUp task:', clickupTaskId);
+
+          // Update custom fields in ClickUp
+          try {
+            await updateClickUpDesignOutputLink(clickupApiToken, clickupTaskId, image_url.trim());
+          } catch (e) {
+            console.error('Error updating Design Output Link in ClickUp:', e);
+          }
+          
+          try {
+            await updateClickUpCaption(clickupApiToken, clickupTaskId, caption.trim());
+          } catch (e) {
+            console.error('Error updating Caption in ClickUp:', e);
+          }
+          
+          try {
+            const clientName = client.company_name || '';
+            await updateClickUpClient(clickupApiToken, clickupTaskId, clientName);
+          } catch (e) {
+            console.error('Error updating Client in ClickUp:', e);
+          }
+        }
+      } catch (error) {
+        console.error('Error creating ClickUp task:', error);
+        // Don't fail the entire task creation if ClickUp fails
+      }
+    }
 
     const { data: task, error: taskError } = await supabase
       .from('tasks')
@@ -80,7 +149,8 @@ export async function POST(req: NextRequest) {
           image_urls: Array.isArray(image_urls) ? image_urls : null,
           caption: caption.trim(), 
           status: 'for_review', 
-          created_by: admin.id 
+          created_by: admin.id,
+          clickup_task_id: clickupTaskId // Store ClickUp task ID
         }
       ])
       .select(`

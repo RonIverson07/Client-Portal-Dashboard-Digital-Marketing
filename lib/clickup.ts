@@ -328,3 +328,22 @@ export function extractCaption(task: any): string {
   // Ensure we never return empty string to avoid validation issues
   return description.trim() || ' ';
 }
+
+// Create a new task in ClickUp
+export async function createClickUpTask(apiToken: string, listId: string, title: string, description: string, status: string, settings: any) {
+  const clickupStatus = mapSystemStatusToClickUp(status, settings);
+  
+  const body: any = {
+    name: title,
+    description: description,
+  };
+  
+  if (clickupStatus) {
+    body.status = clickupStatus;
+  }
+  
+  return callClickUpAPI(apiToken, `/list/${listId}/task`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
