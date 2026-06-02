@@ -276,6 +276,7 @@ function TasksContent() {
   const [imgPreviewError, setImgPreviewError] = useState(false);
   const [resolvingFolder, setResolvingFolder] = useState(false);
   const [carouselIndices, setCarouselIndices] = useState<Record<number, number>>({});
+  const [syncingClickUp, setSyncingClickUp] = useState(false);
   
   const [isOverCol, setIsOverCol] = useState<string | null>(null);
   const dragTaskId = useRef<number | null>(null);
@@ -389,6 +390,33 @@ function TasksContent() {
     return () => clearInterval(interval);
   }, [tasks.length > 0]); // Only re-setup when tasks go from empty to loaded
 
+  async function handleClickUpSync() {
+    setSyncingClickUp(true);
+    try {
+      const res = await fetch('/api/admin/clickup/sync', {
+        method: 'POST',
+        credentials: 'include',
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        showToast(data.message || 'Synced with ClickUp!');
+        loadData(); // Refresh tasks
+      } else {
+        showToast(data.error || 'Failed to sync with ClickUp.');
+      }
+    } catch {
+      showToast('Failed to sync with ClickUp.');
+    } finally {
+      setSyncingClickUp(false);
+    }
+  }
+
+  function showToast(msg: string) {
+    setToast(msg);
+    setTimeout(() => setToast(''), 3000);
+  }
+
   async function loadData() {
     try {
       const timestamp = new Date().getTime();
@@ -406,11 +434,6 @@ function TasksContent() {
     } finally {
       setLoading(false);
     }
-  }
-
-  function showToast(msg: string) {
-    setToast(msg);
-    setTimeout(() => setToast(''), 3000);
   }
 
   const handleCarouselIndexChange = (taskId: number, index: number) => {
@@ -576,7 +599,12 @@ function TasksContent() {
           <h1 className={styles.pageTitle}>Tasks</h1>
           <p className={styles.pageSubtitle}>{filteredTasks.length} of {tasks.length} task{tasks.length !== 1 ? 's' : ''}</p>
         </div>
-        <button className="btn btn-primary" onClick={openCreate}>+ New Task</button>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button className="btn btn-secondary" onClick={handleClickUpSync} disabled={syncingClickUp}>
+            {syncingClickUp ? 'Syncing…' : 'Sync with ClickUp'}
+          </button>
+          <button className="btn btn-primary" onClick={openCreate}>+ New Task</button>
+        </div>
       </div>
 
       {/* Filters */}

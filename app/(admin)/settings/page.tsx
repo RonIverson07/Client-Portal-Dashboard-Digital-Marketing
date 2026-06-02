@@ -13,6 +13,16 @@ export default function SettingsPage() {
     from_name: '',
     notification_email: '',
   });
+  const [clickupSettings, setClickupSettings] = useState({
+    api_token: '',
+    space_id: '',
+    list_id: '',
+    list_id_2: '',
+    status_for_review: '',
+    status_approved: '',
+    status_for_revision: '',
+    status_published: ''
+  });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState({ text: '', type: '' });
@@ -39,6 +49,16 @@ export default function SettingsPage() {
             from_name: data.settings.from_name || '',
             notification_email: data.settings.notification_email || '',
           });
+          setClickupSettings({
+            api_token: data.settings.clickup_api_token || '',
+            space_id: data.settings.clickup_space_id || '',
+            list_id: data.settings.clickup_list_id || '',
+            list_id_2: data.settings.clickup_list_id_2 || '',
+            status_for_review: data.settings.clickup_status_for_review || '',
+            status_approved: data.settings.clickup_status_approved || '',
+            status_for_revision: data.settings.clickup_status_for_revision || '',
+            status_published: data.settings.clickup_status_published || ''
+          });
         }
       })
       .finally(() => setLoading(false));
@@ -53,7 +73,17 @@ export default function SettingsPage() {
       const res = await fetch('/api/admin/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(smtp),
+        body: JSON.stringify({ 
+          ...smtp, 
+          clickup_api_token: clickupSettings.api_token,
+          clickup_space_id: clickupSettings.space_id,
+          clickup_list_id: clickupSettings.list_id,
+          clickup_list_id_2: clickupSettings.list_id_2,
+          clickup_status_for_review: clickupSettings.status_for_review,
+          clickup_status_approved: clickupSettings.status_approved,
+          clickup_status_for_revision: clickupSettings.status_for_revision,
+          clickup_status_published: clickupSettings.status_published
+        }),
       });
 
       if (res.ok) {
@@ -121,7 +151,6 @@ export default function SettingsPage() {
                   value={smtp.host}
                   onChange={(e) => setSmtp({ ...smtp, host: e.target.value })}
                   placeholder="smtp.mailersend.net"
-                  required
                 />
               </div>
               <div className={styles.formGroup}>
@@ -131,7 +160,6 @@ export default function SettingsPage() {
                   value={smtp.port}
                   onChange={(e) => setSmtp({ ...smtp, port: e.target.value })}
                   placeholder="587"
-                  required
                 />
               </div>
               <div className={styles.formGroup}>
@@ -141,7 +169,6 @@ export default function SettingsPage() {
                   value={smtp.user}
                   onChange={(e) => setSmtp({ ...smtp, user: e.target.value })}
                   placeholder="MS_xxxxxx@..."
-                  required
                 />
               </div>
               <div className={styles.formGroup}>
@@ -151,7 +178,6 @@ export default function SettingsPage() {
                   value={smtp.password}
                   onChange={(e) => setSmtp({ ...smtp, password: e.target.value })}
                   placeholder="Your SMTP Token"
-                  required
                 />
               </div>
               <div className={styles.formGroup}>
@@ -161,7 +187,6 @@ export default function SettingsPage() {
                   value={smtp.from_email}
                   onChange={(e) => setSmtp({ ...smtp, from_email: e.target.value })}
                   placeholder="notifications@yourdomain.com"
-                  required
                 />
               </div>
               <div className={styles.formGroup}>
@@ -171,7 +196,6 @@ export default function SettingsPage() {
                   value={smtp.from_name}
                   onChange={(e) => setSmtp({ ...smtp, from_name: e.target.value })}
                   placeholder="Content Approval Team"
-                  required
                 />
               </div>
               <div className={styles.formGroup}>
@@ -181,7 +205,88 @@ export default function SettingsPage() {
                   value={smtp.notification_email}
                   onChange={(e) => setSmtp({ ...smtp, notification_email: e.target.value })}
                   placeholder="your-admin-email@domain.com"
-                  required
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className={styles.formSection}>
+            <h2 className={styles.sectionTitle}>ClickUp Integration</h2>
+            <p className={styles.sectionDescription}>
+              Configure ClickUp integration to sync tasks between your system and ClickUp.
+            </p>
+
+            <div className={styles.formGrid}>
+              <div className={styles.formGroup} style={{ gridColumn: 'span 2' }}>
+                <label>ClickUp API Token</label>
+                <input
+                  type="password"
+                  value={clickupSettings.api_token}
+                  onChange={(e) => setClickupSettings({ ...clickupSettings, api_token: e.target.value })}
+                  placeholder="pk_XXXXXXXXXXXXXXXXXXXXXXXX"
+                />
+              </div>
+              <div className={styles.formGroup}>
+                <label>Space ID</label>
+                <input
+                  type="text"
+                  value={clickupSettings.space_id}
+                  onChange={(e) => setClickupSettings({ ...clickupSettings, space_id: e.target.value })}
+                  placeholder="12345678"
+                />
+              </div>
+              <div className={styles.formGroup}>
+                <label>List ID 1</label>
+                <input
+                  type="text"
+                  value={clickupSettings.list_id}
+                  onChange={(e) => setClickupSettings({ ...clickupSettings, list_id: e.target.value })}
+                  placeholder="12345678"
+                />
+              </div>
+              <div className={styles.formGroup}>
+                <label>List ID 2 (Optional)</label>
+                <input
+                  type="text"
+                  value={clickupSettings.list_id_2}
+                  onChange={(e) => setClickupSettings({ ...clickupSettings, list_id_2: e.target.value })}
+                  placeholder="12345678 (leave empty if not needed)"
+                />
+              </div>
+              <div className={styles.formGroup}>
+                <label>ClickUp Status for "For Review"</label>
+                <input
+                  type="text"
+                  value={clickupSettings.status_for_review}
+                  onChange={(e) => setClickupSettings({ ...clickupSettings, status_for_review: e.target.value })}
+                  placeholder="e.g., to review"
+                />
+              </div>
+              <div className={styles.formGroup}>
+                <label>ClickUp Status for "Approved"</label>
+                <input
+                  type="text"
+                  value={clickupSettings.status_approved}
+                  onChange={(e) => setClickupSettings({ ...clickupSettings, status_approved: e.target.value })}
+                  placeholder="e.g., approved"
+                />
+              </div>
+              <div className={styles.formGroup}>
+                <label>ClickUp Status for "For Revision"</label>
+                <input
+                  type="text"
+                  value={clickupSettings.status_for_revision}
+                  onChange={(e) => setClickupSettings({ ...clickupSettings, status_for_revision: e.target.value })}
+                  placeholder="e.g., revision"
+                />
+              </div>
+              <div className={styles.formGroup}>
+                <label>ClickUp Status for "Published"</label>
+                <input
+                  type="text"
+                  value={clickupSettings.status_published}
+                  onChange={(e) => setClickupSettings({ ...clickupSettings, status_published: e.target.value })}
+                  placeholder="e.g., published"
                 />
               </div>
             </div>

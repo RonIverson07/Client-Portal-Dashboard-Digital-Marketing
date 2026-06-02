@@ -3,6 +3,7 @@ export const revalidate = 0;
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/lib/supabase';
 import { getAdminFromRequest } from '@/lib/auth';
+import { updateClickUpTaskStatus, updateClickUpTaskTitle } from '@/lib/clickup';
 
 interface RouteParams {
   params: { id: string };
@@ -108,6 +109,44 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
           new_value: status 
         }
       ]);
+
+      // Sync status change to ClickUp if task has a ClickUp ID
+      if (current.clickup_task_id) {
+        // Get ClickUp settings
+        const { data: settings, error: settingsError } = await supabase
+          .from('settings')
+          .select('*')
+          .eq('id', 1)
+          .single();
+
+        if (!settingsError && settings?.clickup_api_token) {
+          try {
+            await updateClickUpTaskStatus(settings.clickup_api_token, current.clickup_task_id, status, settings);
+          } catch (clickupErr) {
+            console.error('Failed to update ClickUp task status:', clickupErr);
+            // Don't fail the whole request if ClickUp sync fails
+          }
+        }
+      }
+    }
+
+    // Sync title change to ClickUp if task has a ClickUp ID
+    if (title && title.trim() !== current.title && current.clickup_task_id) {
+      // Get ClickUp settings
+      const { data: settings, error: settingsError } = await supabase
+        .from('settings')
+        .select('*')
+        .eq('id', 1)
+        .single();
+
+      if (!settingsError && settings?.clickup_api_token) {
+        try {
+          await updateClickUpTaskTitle(settings.clickup_api_token, current.clickup_task_id, title.trim());
+        } catch (clickupErr) {
+          console.error('Failed to update ClickUp task title:', clickupErr);
+          // Don't fail the whole request if ClickUp sync fails
+        }
+      }
     }
 
     const formattedTask = {
