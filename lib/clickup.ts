@@ -155,6 +155,64 @@ export async function updateClickUpCaption(apiToken: string, taskId: string, cap
   }
 }
 
+// Update the "Client" custom field on a ClickUp task
+export async function updateClickUpClient(apiToken: string, taskId: string, clientName: string) {
+  try {
+    console.log('updateClickUpClient called with:', {
+      taskId,
+      clientName,
+    });
+
+    // First, get the task to find the custom field ID for "Client"
+    const task = await getClickUpTask(apiToken, taskId);
+    
+    if (task.custom_fields) {
+      console.log('ClickUp task custom fields for Client update:', task.custom_fields.map((f: any) => ({ name: f.name, type: f.type })));
+      
+      const clientField = task.custom_fields.find(
+        (field: any) => field.name === 'Client'
+      );
+
+      console.log('Found Client custom field:', JSON.stringify(clientField, null, 2));
+
+      if (clientField) {
+        let valueToSend = clientName;
+        
+        // If it's a drop down, find the option ID by name
+        if (clientField.type === 'drop_down' && clientField.type_config?.options) {
+          console.log('Client field is a drop down, looking for option matching:', clientName);
+          const matchingOption = clientField.type_config.options.find(
+            (opt: any) => opt.name?.toLowerCase() === clientName.toLowerCase()
+          );
+          
+          if (matchingOption) {
+            console.log('Found matching option:', matchingOption);
+            valueToSend = matchingOption.id; // Drop downs use option ID, not name
+          } else {
+            console.warn('No matching drop down option found for client:', clientName, 'Available options:', clientField.type_config.options.map((o: any) => o.name));
+          }
+        }
+
+        console.log('Updating Client custom field with:', {
+          fieldId: clientField.id,
+          value: valueToSend,
+          fieldType: clientField.type
+        });
+
+        // Update the custom field
+        const result = await updateClickUpCustomField(apiToken, taskId, clientField.id, valueToSend, clientField.type);
+        console.log('Successfully updated Client custom field:', result);
+        return result;
+      } else {
+        console.error('Could not find "Client" custom field on ClickUp task - available fields:', task.custom_fields.map((f: any) => f.name));
+      }
+    }
+  } catch (error) {
+    console.error('Error updating ClickUp Client custom field:', error);
+    throw error;
+  }
+}
+
 export function mapClickUpStatusToSystem(clickupStatus: string, settings: any): string {
   // Normalize status for comparison (lowercase, replace underscores with spaces)
   const normalize = (s: string) => s.toLowerCase().replace(/_/g, ' ');

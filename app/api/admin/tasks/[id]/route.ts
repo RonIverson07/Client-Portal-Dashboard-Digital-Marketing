@@ -3,7 +3,7 @@ export const revalidate = 0;
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/lib/supabase';
 import { getAdminFromRequest } from '@/lib/auth';
-import { updateClickUpTaskStatus, updateClickUpTaskTitle, updateClickUpDesignOutputLink, updateClickUpCaption, updateClickUpTaskDescription } from '@/lib/clickup';
+import { updateClickUpTaskStatus, updateClickUpTaskTitle, updateClickUpDesignOutputLink, updateClickUpCaption, updateClickUpTaskDescription, updateClickUpClient } from '@/lib/clickup';
 
 interface RouteParams {
   params: { id: string };
@@ -70,7 +70,10 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
 
     const { data: current, error: fetchError } = await supabase
       .from('tasks')
-      .select('*')
+      .select(`
+        *,
+        clients (company_name)
+      `)
       .eq('id', params.id)
       .single();
 
@@ -207,6 +210,58 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
         console.error('Failed to update ClickUp task Caption/Description:', clickupErr);
         // Don't fail the whole request if ClickUp sync fails
       }
+    }
+  }
+
+  // Sync Client to ClickUp custom field
+  console.log('=== DEBUG CLIENT SYNC START ===');
+  console.log('current.clickup_task_id:', current.clickup_task_id);
+  console.log('current:', JSON.stringify(current, null, 2));
+  console.log('client_id:', client_id);
+  console.log('updatedTask:', JSON.stringify(updatedTask, null, 2));
+  if (current.clickup_task_id) {
+    console.log('✅ Entered Client sync block');
+    let clientName = null;
+    
+    // Check if updatedTask has clients
+    if (updatedTask?.clients?.company_name) {
+      clientName = updatedTask.clients.company_name;
+    } 
+    // Otherwise, if client_id was provided, fetch the client
+    else if (client_id !== undefined) {
+      const { data: client } = await supabase
+        .from('clients')
+        .select('company_name')
+        .eq('id', Number(client_id))
+        .single();
+      clientName = client?.company_name;
+    }
+    // Fallback to current client if available
+    else if (current?.clients?.company_name) {
+      clientName = current.clients.company_name;
+    }
+
+    if (clientName) {
+      console.log('Proceeding to update Client custom field in ClickUp:', {
+        clientName,
+      });
+      // Get ClickUp settings
+      const { data: settings, error: settingsError } = await supabase
+        .from('settings')
+        .select('*')
+        .eq('id', 1)
+        .single();
+
+      if (!settingsError && settings?.clickup_api_token) {
+        try {
+          await updateClickUpClient(settings.clickup_api_token, current.clickup_task_id, clientName);
+        } catch (clickupErr) {
+          console.error('Failed to update ClickUp task Client custom field:', clickupErr);
+          // Don't fail the whole request if ClickUp sync fails
+        }
+      }
+    } else {
+      console.log('No client name found to sync to ClickUp');
     }
   }
 
