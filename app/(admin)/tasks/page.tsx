@@ -280,8 +280,18 @@ function TasksContent() {
   
   const [isOverCol, setIsOverCol] = useState<string | null>(null);
   const dragTaskId = useRef<number | null>(null);
-  const [autoSyncEnabled, setAutoSyncEnabled] = useState(true); // Auto-sync enabled by default
+  const [autoSyncEnabled, setAutoSyncEnabled] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('autoSyncEnabled') !== 'false';
+    }
+    return true;
+  });
   const [lastSynced, setLastSynced] = useState<Date | null>(null);
+
+  // Save auto-sync state to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('autoSyncEnabled', String(autoSyncEnabled));
+  }, [autoSyncEnabled]);
 
   // Refs for syncing
   const tasksRef = useRef(tasks);
