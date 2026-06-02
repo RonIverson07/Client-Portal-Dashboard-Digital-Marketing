@@ -115,20 +115,20 @@ export async function POST(req: NextRequest) {
 
           // Update custom fields in ClickUp
           try {
-            await updateClickUpDesignOutputLink(clickupApiToken, clickupTaskId, image_url.trim());
+            await updateClickUpDesignOutputLink(clickupApiToken, clickupTaskId!, image_url.trim());
           } catch (e) {
             console.error('Error updating Design Output Link in ClickUp:', e);
           }
           
           try {
-            await updateClickUpCaption(clickupApiToken, clickupTaskId, caption.trim());
+            await updateClickUpCaption(clickupApiToken, clickupTaskId!, caption.trim());
           } catch (e) {
             console.error('Error updating Caption in ClickUp:', e);
           }
           
           try {
             const clientName = client.company_name || '';
-            await updateClickUpClient(clickupApiToken, clickupTaskId, clientName);
+            await updateClickUpClient(clickupApiToken, clickupTaskId!, clientName);
           } catch (e) {
             console.error('Error updating Client in ClickUp:', e);
           }
