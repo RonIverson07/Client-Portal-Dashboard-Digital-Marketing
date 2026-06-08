@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     console.log('Settings POST received:', JSON.stringify(body, null, 2));
 
-    const { host, port, user: smtpUser, password, from_email, from_name, notification_email, clickup_api_token, clickup_space_id, clickup_list_id, clickup_list_id_2, clickup_status_for_review, clickup_status_approved, clickup_status_for_revision, clickup_status_published } = body;
+    const { host, port, user: smtpUser, password, from_email, from_name, notification_email, clickup_api_token, clickup_space_id, clickup_list_id, clickup_list_id_2, clickup_list_id_3, clickup_status_for_review, clickup_status_approved, clickup_status_for_revision, clickup_status_published } = body;
 
     const upsertData = {
       id: 1,
@@ -47,6 +47,7 @@ export async function POST(req: NextRequest) {
       clickup_space_id: clickup_space_id || null,
       clickup_list_id: clickup_list_id || null,
       clickup_list_id_2: clickup_list_id_2 || null,
+      clickup_list_id_3: clickup_list_id_3 || null,
       clickup_status_for_review: clickup_status_for_review || null,
       clickup_status_approved: clickup_status_approved || null,
       clickup_status_for_revision: clickup_status_for_revision || null,

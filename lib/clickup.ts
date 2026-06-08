@@ -1,6 +1,15 @@
 export async function callClickUpAPI(apiToken: string, endpoint: string, options?: RequestInit) {
   const baseUrl = 'https://api.clickup.com/api/v2';
-  const fullUrl = `${baseUrl}${endpoint}`;
+  let fullUrl = '';
+  if (endpoint.startsWith('http')) {
+    fullUrl = endpoint;
+  } else if (endpoint.startsWith('/api/v3') || endpoint.startsWith('/v3')) {
+    const path = endpoint.startsWith('/api/v3') ? endpoint : `/api${endpoint}`;
+    fullUrl = `https://api.clickup.com${path}`;
+  } else {
+    const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+    fullUrl = `${baseUrl}${path}`;
+  }
   
   console.log('ClickUp API Request:', {
     url: fullUrl,
@@ -47,6 +56,62 @@ export async function updateClickUpTaskStatus(apiToken: string, taskId: string, 
   const clickupStatus = mapSystemStatusToClickUp(status, settings);
   if (!clickupStatus) return null;
   
+  // Determine target List ID based on status
+  let targetListId = settings.clickup_list_id; // Default list (List 1)
+  
+  if (status === 'for_revision' && settings.clickup_list_id_3) {
+    targetListId = settings.clickup_list_id_3;
+  } else if (status === 'published' && settings.clickup_list_id_2) {
+    targetListId = settings.clickup_list_id_2;
+  }
+
+  // Get current ClickUp task details to find its current list and status
+  let currentTask = null;
+  try {
+    currentTask = await getClickUpTask(apiToken, taskId);
+  } catch (err) {
+    console.error(`Failed to fetch current ClickUp task ${taskId} for status/list check:`, err);
+  }
+
+  if (currentTask && targetListId) {
+    const currentListId = currentTask.list?.id;
+    
+    // If the task is not in the target list, move it first!
+    if (currentListId && currentListId !== targetListId) {
+      console.log(`Task ${taskId} is currently in list ${currentListId}, but status ${status} requires list ${targetListId}. Moving task...`);
+      
+      try {
+        // Fetch workspace/team ID
+        const teamData = await callClickUpAPI(apiToken, '/team');
+        const workspaceId = teamData.teams?.[0]?.id;
+        
+        if (workspaceId) {
+          // Perform move to the new home list using ClickUp API v3
+          await callClickUpAPI(apiToken, `/api/v3/workspaces/${workspaceId}/tasks/${taskId}/home_list/${targetListId}`, {
+            method: 'PUT',
+            body: JSON.stringify({
+              move_custom_fields: true,
+              status_mappings: [
+                {
+                  source_status: currentTask.status?.status,
+                  destination_status: clickupStatus
+                }
+              ]
+            }),
+          });
+          
+          console.log(`Successfully moved task ${taskId} to list ${targetListId} with status ${clickupStatus}`);
+          return { success: true, moved: true };
+        } else {
+          console.error('Could not fetch workspace ID to move task');
+        }
+      } catch (moveErr) {
+        console.error(`Failed to move task ${taskId} to list ${targetListId}:`, moveErr);
+        // Fallback: try to update the status in the current list anyway
+      }
+    }
+  }
+
   return callClickUpAPI(apiToken, `/task/${taskId}`, {
     method: 'PUT',
     body: JSON.stringify({ status: clickupStatus }),

@@ -35,6 +35,9 @@ export async function POST(req: NextRequest) {
     if (settings.clickup_list_id_2) {
       listIds.push(settings.clickup_list_id_2);
     }
+    if (settings.clickup_list_id_3) {
+      listIds.push(settings.clickup_list_id_3);
+    }
     console.log('Fetching tasks from ClickUp lists:', listIds);
     
     const allClickupTasks = [];
@@ -81,7 +84,15 @@ export async function POST(req: NextRequest) {
       const taskId = task.id;
       const existingTaskDbId = existingTaskMap.get(taskId);
       const clickupStatus = task.status?.status || '';
-      const systemStatus = mapClickUpStatusToSystem(clickupStatus, settings);
+      let systemStatus = mapClickUpStatusToSystem(clickupStatus, settings);
+      
+      // Override status based on which list the task belongs to
+      if (settings.clickup_list_id_2 && task.list?.id === settings.clickup_list_id_2) {
+        systemStatus = 'published';
+      } else if (settings.clickup_list_id_3 && task.list?.id === settings.clickup_list_id_3) {
+        systemStatus = 'for_revision';
+      }
+
       const driveUrl = extractGoogleDriveLink(task);
       const clientName = extractClientName(task);
       const caption = extractCaption(task);

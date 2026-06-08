@@ -18,6 +18,7 @@ export default function SettingsPage() {
     space_id: '',
     list_id: '',
     list_id_2: '',
+    list_id_3: '',
     status_for_review: '',
     status_approved: '',
     status_for_revision: '',
@@ -54,6 +55,7 @@ export default function SettingsPage() {
             space_id: data.settings.clickup_space_id || '',
             list_id: data.settings.clickup_list_id || '',
             list_id_2: data.settings.clickup_list_id_2 || '',
+            list_id_3: data.settings.clickup_list_id_3 || '',
             status_for_review: data.settings.clickup_status_for_review || '',
             status_approved: data.settings.clickup_status_approved || '',
             status_for_revision: data.settings.clickup_status_for_revision || '',
@@ -79,6 +81,7 @@ export default function SettingsPage() {
           clickup_space_id: clickupSettings.space_id,
           clickup_list_id: clickupSettings.list_id,
           clickup_list_id_2: clickupSettings.list_id_2,
+          clickup_list_id_3: clickupSettings.list_id_3,
           clickup_status_for_review: clickupSettings.status_for_review,
           clickup_status_approved: clickupSettings.status_approved,
           clickup_status_for_revision: clickupSettings.status_for_revision,
@@ -250,6 +253,15 @@ export default function SettingsPage() {
                   type="text"
                   value={clickupSettings.list_id_2}
                   onChange={(e) => setClickupSettings({ ...clickupSettings, list_id_2: e.target.value })}
+                  placeholder="12345678 (leave empty if not needed)"
+                />
+              </div>
+              <div className={styles.formGroup}>
+                <label>List ID 3 (Optional)</label>
+                <input
+                  type="text"
+                  value={clickupSettings.list_id_3}
+                  onChange={(e) => setClickupSettings({ ...clickupSettings, list_id_3: e.target.value })}
                   placeholder="12345678 (leave empty if not needed)"
                 />
               </div>

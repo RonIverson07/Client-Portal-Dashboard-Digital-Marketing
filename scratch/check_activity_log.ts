@@ -1,18 +1,28 @@
-import { supabaseAdmin } from '../lib/supabaseAdmin';
+import fs from 'fs';
+import path from 'path';
+
+// Load env vars
+const envPath = path.join(process.cwd(), '.env.local');
+if (fs.existsSync(envPath)) {
+  const envContent = fs.readFileSync(envPath, 'utf-8');
+  envContent.split('\n').forEach(line => {
+    const trimmed = line.trim();
+    if (trimmed && !trimmed.startsWith('#')) {
+      const parts = trimmed.split('=');
+      process.env[parts[0].trim()] = parts.slice(1).join('=').trim().replace(/(^["']|["']$)/g, '');
+    }
+  });
+}
 
 async function checkActivityLog() {
-  const { data: logs, error: logError } = await supabaseAdmin
+  const { supabaseAdmin } = await import('../lib/supabase');
+  const { data: logs } = await supabaseAdmin
     .from('activity_log')
-    .select('task_id')
-    .limit(5);
+    .select('*')
+    .eq('task_id', 151)
+    .order('created_at', { ascending: false });
 
-  const { data: tasks, error: taskError } = await supabaseAdmin
-    .from('project_tasks')
-    .select('id')
-    .limit(5);
-
-  console.log('Sample Task IDs from activity_log:', logs?.map(l => l.task_id));
-  console.log('Sample IDs from project_tasks:', tasks?.map(t => t.id));
+  console.log('Activity logs for task 151:', JSON.stringify(logs, null, 2));
 }
 
 checkActivityLog();
